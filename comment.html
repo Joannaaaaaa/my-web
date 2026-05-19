@@ -18,7 +18,7 @@
             border: 1px solid #333; 
             margin-bottom: 20px; 
         }
-        /* ✨ 工具列佈局：桌面版保持水平排列 */
+        /* ✨ 工具列佈局：桌面版保持水平一條龍排列 */
         .filter-group {
             display: flex;
             gap: 10px;
@@ -27,7 +27,7 @@
             align-items: center;
         }
         
-        /* 隱藏原生醜醜的 file input，用 label 來做美化按鈕 */
+        /* 隱藏原生 file input */
         .btn-upload {
             background: #34495e;
             color: white;
@@ -38,7 +38,7 @@
             font-size: 0.95rem;
             transition: background 0.2s;
             white-space: nowrap;
-            text-align: center; /* 讓文字在手機堆疊時置中 */
+            text-align: center;
         }
         .btn-upload:hover { background: #2c3e50; }
 
@@ -73,7 +73,7 @@
         .reply-card { border-left: 4px solid var(--reply-gold); background: rgba(241, 196, 15, 0.05); margin-left: 20px; }
         .best-badge { position: absolute; top: -10px; left: -10px; background: var(--best-green); color: white; padding: 4px 12px; border-radius: 6px; font-weight: bold; font-size: 0.8rem; box-shadow: 0 0 10px rgba(39, 174, 96, 0.5); }
         .user-info { font-size: 0.9rem; color: var(--primary); font-weight: bold; margin-bottom: 10px; }
-        .platform-tag { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
+        .platform-tag { font-size: 0.7rem; padding: 3px 8px; border-radius: 6px; font-weight: bold; vertical-align: middle; }
         .wt-tag { background: #00d564; color: black; }
         .ridi-tag { background: #1e9eff; color: white; }
         .content { font-size: 1.05rem; line-height: 1.6; white-space: pre-wrap; margin-bottom: 15px; }
@@ -82,30 +82,39 @@
         .reply-hint { font-size: 0.8rem; color: var(--reply-gold); margin-bottom: 8px; }
         #status-summary { color: #27ae60; font-size: 1.1rem; margin-top: 10px; font-weight: bold; }
 
-        /* ✨ RWD 行動裝置優化 (螢幕小於 600px 時生效) */
+        /* ✨ RWD 行動裝置排版優化 */
         @media screen and (max-width: 600px) {
-            body { padding: 10px; } /* 縮小網頁邊距 */
-
-            /* 搜尋框內元素由水平改為垂直堆疊 */
+            body { padding: 10px; }
             .search-box { padding: 12px; }
+            
+            /* 手機版改用 wrap，以便配置精緻佈局 */
             .filter-group {
-                flex-direction: column;
-                align-items: stretch; /* 元素撐滿寬度 */
+                flex-wrap: wrap;
                 gap: 8px;
             }
 
-            /* 手機版按鈕和輸入框大小調整 */
-            .btn-upload, .select-platform, .btn-search {
-                width: 100%; /* 撐滿父容器 */
+            /* 📂 上傳按鈕與下拉選單：在手機版變成左右併排各佔一半（按鈕不變肥） */
+            .btn-upload, .select-platform {
+                flex: 1;
+                width: calc(50% - 4px) !important;
                 font-size: 0.9rem;
-                padding: 12px; /* 增加點擊區域 */
-                box-sizing: border-box; /* 確保 padding 不影響寬度計算 */
+                padding: 12px;
+                box-sizing: border-box;
+            }
+
+            /* 🚀 開始按鈕：在手機版獨佔下方一整行，超級好點擊 */
+            .btn-search {
+                width: 100% !important;
+                font-size: 0.95rem;
+                padding: 12px;
+                box-sizing: border-box;
+                text-align: center;
             }
 
             .comment-card { padding: 15px; margin-bottom: 15px; }
             .best-badge { top: -8px; left: -8px; font-size: 0.7rem; padding: 3px 8px; }
             .content { font-size: 0.95rem; }
-            .footer-metrics { gap: 10px; flex-wrap: wrap; /* 指標過多時自動換行 */ }
+            .footer-metrics { gap: 10px; flex-wrap: wrap; }
             .date { width: 100%; text-align: left; margin-top: 5px; margin-left: 0; }
             #fileNameDisplay { font-size: 0.75rem; }
             #status-summary { font-size: 1rem; }
@@ -142,15 +151,12 @@
 </div>
 
 <script>
-    // 智慧型網域分流：如果是本地測試就用 localhost，上傳到雲端就自動連到 Render
     const API_BASE_URL = window.location.protocol === 'https:'
     ? 'https://webtoon-api-e0vg.onrender.com'
     : 'http://localhost:3000';
 
-    // 全域變數，用來儲存使用者上傳後解析出來的陣列
     let uploadedQueue = null;
 
-    // 處理檔案選取的函數
     function handleFileSelect(input) {
         const file = input.files[0];
         const nameDisplay = document.getElementById('fileNameDisplay');
@@ -163,7 +169,6 @@
         const reader = new FileReader();
         reader.onload = function(e) {
             try {
-                // 將讀取到的文字解析為 JSON 物件
                 uploadedQueue = JSON.parse(e.target.result);
                 statusText.innerHTML = `✅ 成功載入 ${uploadedQueue.length} 筆觀測目標，請點擊「開始」按鈕。`;
                 console.log("成功匯入佇列:", uploadedQueue);
@@ -198,7 +203,6 @@
         const statusSummary = document.getElementById('status-summary');
         const selectedPlatform = document.getElementById('platformFilter').value;
         
-        // 【檢查點】如果使用者還沒上傳檔案就按開始，進行提示
         if (!uploadedQueue || uploadedQueue.length === 0) {
             alert("請先點擊『上傳 JSON 清單』按鈕選取您的 JSON 檔案！");
             return;
@@ -215,7 +219,6 @@
             statusSummary.innerHTML = `累積讚數: ${totalLikes} | 累積被回覆數: ${totalReplies}`;
         };
 
-        // 這裡直接改用全域的 uploadedQueue 變數跑迴圈
         for (const item of uploadedQueue) {
             if (selectedPlatform !== 'all' && item.platform !== selectedPlatform) {
                 continue; 
@@ -364,11 +367,20 @@
             const date = new Date(dateStr).toLocaleString();
             
             const metrics = getMetrics(c, item.platform);
+            
+            // 完美讀取作品名稱
+            const workTitle = item.title ? `${item.title} (第 ${item.volume} 話)` : `作品 ID: ${item.id}`;
 
             card.innerHTML = `
                 ${isBest ? '<div class="best-badge" style="z-index: 10;">👑 BEST</div>' : ''}
+                
+                <div style="font-size: 0.85rem; color: #95a5a6; margin-bottom: 12px; font-weight: bold; display: flex; align-items: center; flex-wrap: wrap; gap: 6px;">
+                    <span class="platform-tag ${isWT ? 'wt-tag' : 'ridi-tag'}" style="margin-left: 0; padding: 3px 8px; font-size: 0.75rem; font-weight: bold; border-radius: 6px;">${item.platform.toUpperCase()}</span>
+                    <span style="color: #f39c12; background: rgba(243, 156, 18, 0.1); padding: 2px 8px; border-radius: 4px;">${workTitle}</span>
+                </div>
+
                 ${parentBody ? `<div class="reply-hint">⤴ 回覆留言：「${parentBody.substring(0, 15)}...」</div>` : ''}
-                <div class="user-info">👤 ${name} <span class="platform-tag ${isWT ? 'wt-tag' : 'ridi-tag'}">${item.platform}</span></div>
+                <div class="user-info">👤 ${name}</div>
                 <div class="content">${body}</div>
                 <div class="footer-metrics">
                     <div class="metric-item">👍 ${metrics.likes}</div>
