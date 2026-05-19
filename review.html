@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新增漫畫</title>
+    <style>
+        :root { 
+            --primary: #3498db; 
+            --bg: #0f1218; 
+            --card-bg: #1a1d24; 
+            --text: #ecf0f1; 
+            --status-ongoing: #2ecc71;
+            --status-completed: #3498db;
+            --status-paused: #95a5a6;
+            --status-dropped: #e67e22; /* 🚀 棄坑狀態顏色 */
+        }
+        body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        .nav { margin-bottom: 20px; }
+        .nav a { color: var(--primary); text-decoration: none; font-weight: bold; }
+        
+        .card { background: var(--card-bg); border-radius: 12px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); max-width: 650px; margin: auto; border: 1px solid #333; box-sizing: border-box; }
+        h2 { border-left: 4px solid var(--primary); padding-left: 10px; margin-top: 0; }
+
+        .field { margin-bottom: 20px; }
+        label { display: block; font-weight: bold; margin-bottom: 8px; color: #bdc3c7; font-size: 0.9rem; }
+        
+        input[type="text"], input[type="number"], input[type="date"], textarea { 
+            width: 100%; padding: 12px; background: #0f1218; border: 1px solid #333; 
+            color: white; border-radius: 8px; box-sizing: border-box; font-family: inherit;
+        }
+        textarea { resize: vertical; }
+
+        .team-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+
+        .selector-group { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px; }
+        .select-option { padding: 8px 15px; border-radius: 6px; cursor: pointer; border: 2px solid #444; font-size: 0.85rem; transition: all 0.2s; background: #242831; color: #888; font-weight: bold; }
+        .select-option.selected { border-color: var(--opt-color, var(--primary)); color: var(--opt-color, #fff); box-shadow: 0 0 10px var(--opt-color, var(--primary)); text-shadow: 0 0 5px var(--opt-color, var(--primary)); background: transparent; }
+
+        .stars { display: flex; flex-direction: row-reverse; justify-content: flex-end; margin-top: 5px; }
+        .stars input { display: none; }
+        .stars label { font-size: 35px; color: #333; cursor: pointer; transition: color 0.2s; margin: 0 2px; }
+        .stars input:checked ~ label { color: #f1c40f; }
+        .stars label:hover, .stars label:hover ~ label { color: #f1c40f; }
+
+        .btn-group { display: flex; gap: 10px; margin-top: 30px; }
+        button { flex: 1; padding: 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 1rem; transition: opacity 0.2s; }
+        .btn-save { background: var(--primary); color: white; }
+        .btn-clear { background: #c0392b; color: white; }
+        button:hover { opacity: 0.8; }
+
+        .status { font-size: 12px; color: #555; margin-top: 15px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="nav">
+    <a href="index.html">← 返回</a>
+</div>
+
+<div class="card">
+    <h2>漫畫評論編輯</h2>
+    
+    <div class="field">
+        <label>漫畫名稱</label>
+        <input type="text" id="title" placeholder="例如：上流社會 (64)">
+    </div>
+
+    <div class="field">
+        <label>閱讀狀態</label>
+        <div id="statusSelector" class="selector-group">
+            <div class="select-option" data-status="連載中" onclick="selectStatus('連載中')" style="--opt-color: var(--status-ongoing)">連載中</div>
+            <div class="select-option" data-status="已看完" onclick="selectStatus('已看完')" style="--opt-color: var(--status-completed)">已看完</div>
+            <div class="select-option" data-status="休刊" onclick="selectStatus('休刊')" style="--opt-color: var(--status-paused)">休刊</div>
+            <div class="select-option" data-status="棄坑" onclick="selectStatus('棄坑')" style="--opt-color: var(--status-dropped)">棄坑</div>
+        </div>
+    </div>
+
+    <div class="field" id="updateDayField" style="display:none;">
+        <label>連載更新日</label>
+        <div id="daySelector" class="selector-group">
+            <div class="select-option" data-day="Mon" onclick="selectDay('Mon')">월</div>
+            <div class="select-option" data-day="Tue" onclick="selectDay('Tue')">화</div>
+            <div class="select-option" data-day="Wed" onclick="selectDay('Wed')">수</div>
+            <div class="select-option" data-day="Thu" onclick="selectDay('Thu')">목</div>
+            <div class="select-option" data-day="Fri" onclick="selectDay('Fri')">금</div>
+            <div class="select-option" data-day="Sat" onclick="selectDay('Sat')">토</div>
+            <div class="select-option" data-day="Sun" onclick="selectDay('Sun')">일</div>
+        </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;" class="field">
+        <div>
+            <label>시작</label>
+            <input type="date" id="startDate">
+        </div>
+        <div>
+            <label>끝내다</label>
+            <input type="date" id="endDate">
+        </div>
+    </div>
+
+    <div class="team-grid">
+        <div class="field"><label>원작</label><input type="text" id="author" placeholder="원작"></div>
+        <div class="field"><label>글</label><input type="text" id="adapter" placeholder="글"></div>
+        <div class="field"><label>그림</label><input type="text" id="artist" placeholder="그림"></div>
+        <div class="field"><label>다른 직원</label><input type="text" id="other" placeholder="다른 직원"></div>
+    </div>
+
+    <div class="field">
+        <label>發行平台</label>
+        <div id="platformSelector" class="selector-group"></div>
+    </div>
+
+    <div class="field">
+        <label>評分</label>
+        <div class="stars">
+            <input type="radio" id="star5" name="rating" value="5"><label for="star5">★</label>
+            <input type="radio" id="star4" name="rating" value="4"><label for="star4">★</label>
+            <input type="radio" id="star3" name="rating" value="3"><label for="star3">★</label>
+            <input type="radio" id="star2" name="rating" value="2"><label for="star2">★</label>
+            <input type="radio" id="star1" name="rating" value="1"><label for="star1">★</label>
+        </div>
+    </div>
+
+    <div class="field">
+        <label>評論區</label>
+        <textarea id="comment" rows="6" placeholder="寫下你的心得..."></textarea>
+    </div>
+
+    <div class="btn-group">
+        <button class="btn-save" onclick="saveToGallery()">儲存並返回</button>
+        <button class="btn-clear" onclick="clearData()">清空重填</button>
+    </div>
+    
+    <div id="statusMsg" class="status">正在編輯草稿...</div>
+</div>
+
+<script>
+    const PLATFORM_CONFIG = { "Ridibooks": "#00a0e9", "Kakao": "#ffcd00", "Naver": "#03cf5d", "Bomtoon": "#ff4d6a", "Lezhin": "#ed1c24", "Comico": "#e60012" };
+
+    let selectedPlatforms = [];
+    let selectedStatusValue = "連載中";
+    let selectedUpdateDay = "";
+
+    window.onload = () => {
+        document.getElementById('startDate').value = new Date().toISOString().split('T')[0];
+        initPlatformSelector();
+        selectStatus(selectedStatusValue);
+        loadDraft();
+    };
+
+    function initPlatformSelector() {
+        const container = document.getElementById('platformSelector');
+        Object.keys(PLATFORM_CONFIG).forEach(name => {
+            const opt = document.createElement('div');
+            opt.className = 'select-option';
+            opt.innerText = name;
+            opt.style.setProperty('--opt-color', PLATFORM_CONFIG[name]);
+            opt.onclick = () => {
+                opt.classList.toggle('selected');
+                if (selectedPlatforms.includes(name)) {
+                    selectedPlatforms = selectedPlatforms.filter(p => p !== name);
+                } else {
+                    selectedPlatforms.push(name);
+                }
+                saveDraftTrigger();
+            };
+            container.appendChild(opt);
+        });
+    }
+
+    function selectStatus(statusText) {
+        selectedStatusValue = statusText;
+        document.querySelectorAll('#statusSelector .select-option').forEach(opt => {
+            opt.classList.toggle('selected', opt.getAttribute('data-status') === statusText);
+        });
+        document.getElementById('updateDayField').style.display = (statusText === '連載中') ? 'block' : 'none';
+        saveDraftTrigger();
+    }
+
+    function selectDay(dayCode) {
+        selectedUpdateDay = selectedUpdateDay === dayCode ? "" : dayCode;
+        document.querySelectorAll('#daySelector .select-option').forEach(opt => {
+            opt.classList.toggle('selected', opt.getAttribute('data-day') === selectedUpdateDay);
+        });
+        saveDraftTrigger();
+    }
+
+    function saveToGallery() {
+        const title = document.getElementById('title').value;
+        if (!title) return alert('請輸入漫畫名稱！');
+
+        const newReview = {
+            title: title,
+            status: selectedStatusValue,
+            updateDay: selectedStatusValue === '連載中' ? selectedUpdateDay : '', 
+            startDate: document.getElementById('startDate').value,
+            endDate: document.getElementById('endDate').value, 
+            author: document.getElementById('author').value,
+            adapter: document.getElementById('adapter').value,
+            artist: document.getElementById('artist').value,
+            other: document.getElementById('other').value,
+            platforms: selectedPlatforms,
+            comment: document.getElementById('comment').value,
+            rating: parseInt(document.querySelector('input[name="rating"]:checked')?.value || 0),
+            updatedAt: new Date().toLocaleString()
+        };
+
+        let currentGallery = JSON.parse(localStorage.getItem('my_review_gallery') || "[]");
+        currentGallery.push(newReview);
+        
+        localStorage.setItem('my_review_gallery', JSON.stringify(currentGallery));
+        localStorage.removeItem('comic_review_draft');
+        window.location.href = 'index.html';
+    }
+
+    function loadDraft() {
+        const saved = localStorage.getItem('comic_review_draft');
+        if (saved) {
+            const data = JSON.parse(saved);
+            document.getElementById('title').value = data.title || '';
+            document.getElementById('author').value = data.author || '';
+            document.getElementById('adapter').value = data.adapter || '';
+            document.getElementById('artist').value = data.artist || '';
+            document.getElementById('other').value = data.other || '';
+            document.getElementById('comment').value = data.comment || '';
+            if (data.startDate) document.getElementById('startDate').value = data.startDate;
+            if (data.endDate) document.getElementById('endDate').value = data.endDate;
+            
+            if (data.status) { selectStatus(data.status); }
+            if (data.updateDay) { selectDay(data.updateDay); }
+            
+            selectedPlatforms = data.platforms || [];
+            if (data.rating) document.getElementById(`star${data.rating}`).checked = true;
+            
+            document.querySelectorAll('#platformSelector .select-option').forEach(opt => {
+                if (selectedPlatforms.includes(opt.innerText)) opt.classList.add('selected');
+            });
+        }
+    }
+
+    function saveDraftTrigger() {
+        const draft = {
+            title: document.getElementById('title').value,
+            status: selectedStatusValue,
+            updateDay: selectedUpdateDay,
+            startDate: document.getElementById('startDate').value,
+            endDate: document.getElementById('endDate').value,
+            author: document.getElementById('author').value,
+            adapter: document.getElementById('adapter').value,
+            artist: document.getElementById('artist').value,
+            other: document.getElementById('other').value,
+            platforms: selectedPlatforms,
+            comment: document.getElementById('comment').value,
+            rating: document.querySelector('input[name="rating"]:checked')?.value || 0
+        };
+        localStorage.setItem('comic_review_draft', JSON.stringify(draft));
+    }
+
+    document.addEventListener('input', saveDraftTrigger);
+
+    function clearData() {
+        if (confirm('確定要清空嗎？')) {
+            localStorage.removeItem('comic_review_draft');
+            location.reload();
+        }
+    }
+</script>
+</body>
+</html>

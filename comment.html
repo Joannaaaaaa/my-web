@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Review</title>
+    <style>
+        :root { --primary: #3498db; --bg: #0f1218; --card-bg: #1a1d24; --text: #ecf0f1; --best-green: #27ae60; --reply-gold: #f1c40f; --dislike-red: #e74c3c; }
+        body { font-family: 'PingFang TC', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: auto; }
+        .nav { margin-bottom: 20px; }
+        .nav a { color: var(--primary); text-decoration: none; font-weight: bold; }
+        
+        .search-box { 
+            background: var(--card-bg); 
+            padding: 16px; 
+            border-radius: 12px; 
+            border: 1px solid #333; 
+            margin-bottom: 20px; 
+        }
+        /* ✨ 工具列佈局：加入上傳按鈕 */
+        .filter-group {
+            display: flex;
+            gap: 10px;
+            max-width: 650px;
+            margin: 0 auto;
+            align-items: center;
+        }
+        
+        /* 隱藏原生醜醜的 file input，用 label 來做美化按鈕 */
+        .btn-upload {
+            background: #34495e;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 0.95rem;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+        .btn-upload:hover { background: #2c3e50; }
+
+        .select-platform {
+            flex: 1;
+            padding: 10px 14px; 
+            background: #0f1218; 
+            color: white; 
+            border: 1px solid #444; 
+            border-radius: 8px; 
+            cursor: pointer;
+            font-size: 0.95rem;
+            outline: none;
+        }
+        .select-platform:focus { border-color: var(--primary); }
+
+        .btn-search { 
+            flex: 1;
+            background: var(--primary); 
+            color: white; 
+            border: none; 
+            padding: 10px 20px; 
+            border-radius: 8px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            font-size: 0.95rem; 
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+        .btn-search:hover { background: #2980b9; }
+        
+        .comment-card { background: var(--card-bg); border-radius: 15px; padding: 20px; margin-bottom: 20px; position: relative; border: 1px solid #333; transition: 0.3s; }
+        .reply-card { border-left: 4px solid var(--reply-gold); background: rgba(241, 196, 15, 0.05); margin-left: 20px; }
+        .best-badge { position: absolute; top: -10px; left: -10px; background: var(--best-green); color: white; padding: 4px 12px; border-radius: 6px; font-weight: bold; font-size: 0.8rem; box-shadow: 0 0 10px rgba(39, 174, 96, 0.5); }
+        .user-info { font-size: 0.9rem; color: var(--primary); font-weight: bold; margin-bottom: 10px; }
+        .platform-tag { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
+        .wt-tag { background: #00d564; color: black; }
+        .ridi-tag { background: #1e9eff; color: white; }
+        .content { font-size: 1.05rem; line-height: 1.6; white-space: pre-wrap; margin-bottom: 15px; }
+        .footer-metrics { display: flex; gap: 20px; font-size: 0.85rem; color: #7f8c8d; border-top: 1px solid #333; padding-top: 10px; }
+        .date { margin-left: auto; }
+        .reply-hint { font-size: 0.8rem; color: var(--reply-gold); margin-bottom: 8px; }
+        #status-summary { color: #27ae60; font-size: 1.1rem; margin-top: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="nav"><a href="index.html">← 返回主頁</a></div>
+    
+    <div class="search-box">
+        <div class="filter-group">
+            <label for="jsonFileInput" class="btn-upload">📂 上傳 JSON 清單</label>
+            <input type="file" id="jsonFileInput" accept=".json" style="display: none;" onchange="handleFileSelect(this)">
+            
+            <select id="platformFilter" class="select-platform">
+                <option value="all">顯示全部平台</option>
+                <option value="ridi">Ridibooks</option>
+                <option value="naver">Naver</option>
+                <option value="webtoon">Webtoon</option>
+            </select>
+            <button class="btn-search" onclick="fetchAndFilter()">開始</button>
+        </div>
+        <div id="fileNameDisplay" style="text-align: center; font-size: 0.8rem; color: var(--primary); margin-top: 8px; font-weight: bold;">⚠️ 請先上傳觀測清單 JSON 檔</div>
+    </div>    
+    
+    <div id="status" style="text-align:center; color:#7f8c8d; margin-bottom:20px;">
+        <div>上傳檔案後點擊開始同步數據</div>
+        <div id="status-summary"></div>
+    </div>
+
+    <div id="commentList"></div>
+</div>
+
+<script>
+    // 智慧型網域分流：如果是本地測試就用 localhost，上傳到雲端就自動連到 Render
+    const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://localhost:3000'
+        : 'https://你的render專屬網址.onrender.com'; // 👈 部署到 Render 後把這裡換成你的雲端網址
+
+    // 全域變數，用來儲存使用者上傳後解析出來的陣列
+    let uploadedQueue = null;
+
+    // ✨ 新增：處理檔案選取的函數
+    function handleFileSelect(input) {
+        const file = input.files[0];
+        const nameDisplay = document.getElementById('fileNameDisplay');
+        const statusText = document.querySelector('#status div:first-child');
+        
+        if (!file) return;
+
+        nameDisplay.innerText = `📄 已載入檔案：${file.name}`;
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                // 將讀取到的文字解析為 JSON 物件
+                uploadedQueue = JSON.parse(e.target.result);
+                statusText.innerHTML = `✅ 成功載入 ${uploadedQueue.length} 筆觀測目標，請點擊「開始」按鈕。`;
+                console.log("成功匯入佇列:", uploadedQueue);
+            } catch (err) {
+                alert("JSON 格式解析失敗，請確認檔案內容是否正確！");
+                nameDisplay.innerText = "❌ 檔案解析失敗";
+                uploadedQueue = null;
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function getMetrics(c, platform) {
+        let likes = 0;
+        let dislikes = 0;
+        let replies = 0;
+        if (platform === 'webtoon' || platform === 'naver') {
+            likes = c.reactions?.[0]?.emotions?.find(e => e.emotionId === 'like')?.count || 0;
+            dislikes = c.reactions?.[0]?.emotions?.find(e => e.emotionId === 'dislike')?.count || 0;
+            replies = c.childPostCount || 0;
+        } else if (platform === 'ridi') {
+            likes = c.like_count || 0;
+            replies = c.reply_count || 0;
+            dislikes = 0;
+        }
+        return { likes, dislikes, replies };
+    }
+
+    async function fetchAndFilter() {
+        const listContainer = document.getElementById('commentList');
+        const statusText = document.querySelector('#status div:first-child');
+        const statusSummary = document.getElementById('status-summary');
+        const selectedPlatform = document.getElementById('platformFilter').value;
+        
+        // ✨【檢查點】如果使用者還沒上傳檔案就按開始，進行提示
+        if (!uploadedQueue || uploadedQueue.length === 0) {
+            alert("請先點擊『上傳 JSON 清單』按鈕選取您的 JSON 檔案！");
+            return;
+        }
+        
+        listContainer.innerHTML = '';
+        statusSummary.innerHTML = '';
+        
+        let totalFound = 0;
+        let totalLikes = 0;
+        let totalReplies = 0; 
+
+        const updateUIStats = () => {
+            statusSummary.innerHTML = `累積讚數: ${totalLikes} | 累積被回覆數: ${totalReplies}`;
+        };
+
+        // ✨ 這裡直接改用全域的 uploadedQueue 變數跑迴圈
+        for (const item of uploadedQueue) {
+            if (selectedPlatform !== 'all' && item.platform !== selectedPlatform) {
+                continue; 
+            }
+
+            let offset = 0;
+            let hasMore = true;
+            let lastPostId = "";
+            let limit = 400; 
+            const targetSearch = item.targetName;
+
+            while (hasMore) {
+                statusText.innerHTML = `🔍 正在搜尋 <b>${item.platform}</b> (${targetSearch}) 話次: ${item.id}...`;
+                try {
+                    const url = `${API_BASE_URL}/get-comments?bookId=${item.id}&limit=${limit}&platform=${item.platform}&offsetPostId=${lastPostId}&offset=${offset}`;                    const response = await fetch(url);
+                    if (!response.ok) throw new Error(`主留言獲取失敗: ${response.status}`);
+                    
+                    const data = await response.json();
+                    let comments = [];
+
+                    if (item.platform === 'webtoon' || item.platform === 'naver') {
+                        comments = data.result?.posts || [];
+                        if (comments.length > 0) {
+                            lastPostId = comments[comments.length - 1].id;
+                            hasMore = (comments.length === limit);
+                        } else { hasMore = false; }
+                    } else if (item.platform === 'ridi') {
+                        comments = data.serial_comment?.comments || [];
+                        hasMore = (comments.length === limit); 
+                    }
+                    
+                    const myMainComments = comments.filter(c => {
+                        const userName = (item.platform === 'webtoon' || item.platform === 'naver') ? c.createdBy?.name : c.user_id;
+                        return userName && (userName.startsWith(targetSearch) || userName === targetSearch);
+                    });
+                    
+                    myMainComments.forEach(c => {
+                        const m = getMetrics(c, item.platform);
+                        totalLikes += m.likes;
+                    });
+
+                    myMainComments.forEach(c => {
+                        const name = (item.platform === 'ridi') ? c.user_id : c.createdBy?.name;
+                        const body = (item.platform === 'ridi') ? c.content : c.body;
+                        console.log(`📌 [${item.platform} 主留言] 👤 ${name} : ${body}`);
+                    });
+                    
+                    totalFound += myMainComments.length;
+                    renderComments(myMainComments, item, listContainer);
+                    updateUIStats();
+                    
+                    const myMainCommentIds = myMainComments.map(c => (item.platform === 'ridi' ? c.comment_id : c.id));
+
+                    for (const post of comments) {
+                        const postId = (item.platform === 'ridi' ? post.comment_id : post.id);
+                        const postBody = (item.platform === 'ridi' ? post.content : post.body);
+                        const hasReplies = (item.platform === 'ridi' ? post.reply_count > 0 : post.childPostCount > 0);
+
+                        const isMyMainPost = myMainCommentIds.includes(postId);
+
+                        if (hasReplies) {
+                            try {
+                                const replyUrl = `${API_BASE_URL}/get-replies?postId=${postId}&limit=100&bookId=${item.id}&platform=${item.platform}`;
+                                const replyRes = await fetch(replyUrl);
+                                
+                                if (!replyRes.ok) {
+                                    console.warn(`跳過回覆抓取 (PostID: ${postId}): ${replyRes.status}`);
+                                    continue;
+                                }
+
+                                const replyData = await replyRes.json();
+                                
+                                let allReplies = [];
+                                if (item.platform === 'ridi') {
+                                    allReplies = replyData.serial_comment?.replies || [];
+                                } else {
+                                    allReplies = replyData.result?.posts || [];
+                                }
+
+                                allReplies.forEach(r => {
+                                    const rName = (item.platform === 'ridi') ? r.user_id : r.createdBy?.name;
+                                    const rBody = r.content || r.body;
+                                    console.log(`   💬 [${item.platform} 回覆] 👤 ${rName} : ${rBody.substring(0, 50)}`);
+                                });
+
+                                const myRepliesInOthersPost = allReplies.filter(r => {
+                                    const name = (item.platform === 'ridi' ? r.user_id : r.createdBy?.name || "");
+                                    return (name.startsWith(targetSearch) && !isMyMainPost);
+                                });
+
+                                if (myRepliesInOthersPost.length > 0) {
+                                    myRepliesInOthersPost.forEach(r => {
+                                        const m = getMetrics(r, item.platform);
+                                        totalLikes += m.likes; 
+                                    });
+                                    totalFound += myRepliesInOthersPost.length;
+                                    renderComments(myRepliesInOthersPost, item, listContainer, postBody); 
+                                    updateUIStats();
+                                }
+
+                                if (isMyMainPost) {
+                                    if (allReplies.length > 0) {
+                                        totalReplies += allReplies.length; 
+                                        
+                                        allReplies.forEach(r => {
+                                            const m = getMetrics(r, item.platform);
+                                            totalLikes += m.likes;
+                                        });
+
+                                        renderComments(allReplies, item, listContainer, postBody);
+                                        updateUIStats();
+                                    }
+                                }
+                            } catch (replyErr) {
+                                console.error(`回覆解析錯誤 (PostID: ${postId}):`, replyErr);
+                            }
+                        }
+                    }
+                    
+                    if (hasMore) {
+                        offset += limit;
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                } catch (e) {
+                    console.error("主流程錯誤:", e);
+                    hasMore = false;
+                }
+            }
+        }
+        statusText.innerHTML = `✅ 搜尋結束，共找到 ${totalFound} 則相關評論。`;
+    }
+
+    function renderComments(list, item, container, parentBody = null) {
+        list.forEach(c => {
+            const card = document.createElement('div');
+            card.className = 'comment-card' + (parentBody ? ' reply-card' : '');
+            
+            const isWT = (item.platform === 'webtoon' || item.platform === 'naver');
+            const isBest = isWT ? (c.isTop || c.isPinned) : !!c.is_best;
+            const name = isWT ? c.createdBy?.name : c.user_id;
+            const body = isWT ? c.body : c.content;
+            const dateStr = isWT ? c.createdAt : c.created;
+            const date = new Date(dateStr).toLocaleString();
+            
+            const metrics = getMetrics(c, item.platform);
+
+            card.innerHTML = `
+                ${isBest ? '<div class="best-badge" style="z-index: 10;">👑 BEST</div>' : ''}
+                ${parentBody ? `<div class="reply-hint">⤴ 回覆留言：「${parentBody.substring(0, 15)}...」</div>` : ''}
+                <div class="user-info">👤 ${name} <span class="platform-tag ${isWT ? 'wt-tag' : 'ridi-tag'}">${item.platform}</span></div>
+                <div class="content">${body}</div>
+                <div class="footer-metrics">
+                    <div class="metric-item">👍 ${metrics.likes}</div>
+                    ${isWT ? `<div class="metric-item">👎 ${metrics.dislikes}</div>` : ''}
+                    <div class="metric-item">💬 ${metrics.replies}</div>
+                    <div class="date">🕒 ${date}</div>
+                </div>
+            `;
+            container.appendChild(card);
+        });
+    }
+</script>
+</body>
+</html>
