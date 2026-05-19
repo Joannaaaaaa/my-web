@@ -114,9 +114,9 @@
 
 <script>
     // 智慧型網域分流：如果是本地測試就用 localhost，上傳到雲端就自動連到 Render
-    const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? 'http://localhost:3000'
-        : 'https://webtoon-api-e0vg.onrender.com'; // 👈 部署到 Render 後把這裡換成你的雲端網址
+    const API_BASE_URL = window.location.protocol === 'https:'
+    ? 'https://webtoon-api-e0vg.onrender.com'
+    : 'http://localhost:3000';
 
     // 全域變數，用來儲存使用者上傳後解析出來的陣列
     let uploadedQueue = null;
@@ -195,13 +195,16 @@
             let offset = 0;
             let hasMore = true;
             let lastPostId = "";
-            let limit = 400; 
+            let limit = 200; 
             const targetSearch = item.targetName;
 
             while (hasMore) {
                 statusText.innerHTML = `🔍 正在搜尋 <b>${item.platform}</b> (${targetSearch}) 話次: ${item.id}...`;
                 try {
-                    const url = `${API_BASE_URL}/get-comments?bookId=${item.id}&limit=${limit}&platform=${item.platform}&offsetPostId=${lastPostId}&offset=${offset}`;                    const response = await fetch(url);
+                    const url = `${API_BASE_URL}/get-comments?bookId=${item.id}&limit=${limit}&platform=${item.platform}&offsetPostId=${lastPostId}&offset=${offset}`;
+                    console.log("running: "+url)
+                    const response = await fetch(url);
+                    console.log("running: "+response.status)
                     if (!response.ok) throw new Error(`主留言獲取失敗: ${response.status}`);
                     
                     const data = await response.json();
@@ -332,11 +335,21 @@
             const date = new Date(dateStr).toLocaleString();
             
             const metrics = getMetrics(c, item.platform);
+            
+            const workTitle = item.title ? `${item.title} (第 ${item.volume} 話)` : `作品 ID: ${item.id}`;
 
             card.innerHTML = `
-                ${isBest ? '<div class="best-badge" style="z-index: 10;">👑 BEST</div>' : ''}
+                ${isBest ? '<div class="best-badge" style="z-index: 10;">BEST</div>' : ''}
+                
+                <div style="font-size: 0.85rem; color: #95a5a6; margin-bottom: 12px; font-weight: bold; display: flex; align-items: center; flex-wrap: wrap; gap: 6px;">
+                    <span class="platform-tag ${isWT ? 'wt-tag' : 'ridi-tag'}" style="margin-left: 0; padding: 3px 8px; font-size: 0.75rem; font-weight: bold; border-radius: 6px;">${item.platform.toUpperCase()}</span>
+                    <span style="color: #f39c12; background: rgba(243, 156, 18, 0.1); padding: 2px 8px; border-radius: 4px;">${workTitle}</span>
+                </div>
+
                 ${parentBody ? `<div class="reply-hint">⤴ 回覆留言：「${parentBody.substring(0, 15)}...」</div>` : ''}
-                <div class="user-info">👤 ${name} <span class="platform-tag ${isWT ? 'wt-tag' : 'ridi-tag'}">${item.platform}</span></div>
+                
+                <div class="user-info">👤 ${name}</div>
+                
                 <div class="content">${body}</div>
                 <div class="footer-metrics">
                     <div class="metric-item">👍 ${metrics.likes}</div>
