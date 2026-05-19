@@ -116,7 +116,7 @@
     // 智慧型網域分流：如果是本地測試就用 localhost，上傳到雲端就自動連到 Render
     const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
         ? 'http://localhost:3000'
-        : 'https://你的render專屬網址.onrender.com'; // 👈 部署到 Render 後把這裡換成你的雲端網址
+        : 'https://webtoon-api-e0vg.onrender.com'; // 👈 部署到 Render 後把這裡換成你的雲端網址
 
     // 全域變數，用來儲存使用者上傳後解析出來的陣列
     let uploadedQueue = null;
