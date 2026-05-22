@@ -14,7 +14,7 @@
             --status-ongoing: #2ecc71;
             --status-completed: #3498db;
             --status-paused: #95a5a6;
-            --status-dropped: #e67e22; /* 🚀 新增：棄坑狀態顏色 */
+            --status-dropped: #e67e22;
         }
         body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px 20px 120px 20px; }
         .container { max-width: 1000px; margin: auto; }
@@ -63,13 +63,14 @@
         
         .title-wrapper { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
         .comic-title { font-size: 1.2rem; font-weight: bold; color: #fff; margin: 0; border-left: 4px solid var(--primary); padding-left: 10px; flex: 1; }
+        .comic-kr-title { font-size: 0.85rem; color: #8a94a6; font-weight: normal; display: block; margin-top: 20px; font-style: italic; }
         
         .badge-group { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
         .status-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; color: #fff; white-space: nowrap; }
         .status-ongoing { background: var(--status-ongoing); }
         .status-completed { background: var(--status-completed); }
         .status-paused { background: var(--status-paused); }
-        .status-dropped { background: var(--status-dropped); } /* 🚀 棄坑徽章樣式 */
+        .status-dropped { background: var(--status-dropped); }
 
         .rating-stars { color: #f1c40f; font-size: 1.1rem; margin-bottom: 6px; }
         .info-row { font-size: 0.85rem; color: #bdc3c7; margin-bottom: 4px; line-height: 1.4; }
@@ -136,7 +137,7 @@
 
     <div class="search-filter-box">
         <div class="search-row">
-            <input type="text" id="searchInput" class="search-input" placeholder="🔍 輸入作品名稱、創作者名字進行快速搜尋..." oninput="onFilterChange()">
+            <input type="text" id="searchInput" class="search-input" placeholder="🔍 輸入作品中/韓文名稱、創作者名稱進行快速搜尋..." oninput="onFilterChange()">
         </div>
         <div class="dropdown-row">
             <select id="platformFilter" class="filter-select" onchange="onFilterChange()">
@@ -169,7 +170,10 @@
         
         <div id="viewModeArea">
             <div class="title-wrapper">
-                <h1 id="viewTitle" style="font-size: 1.8rem; margin: 0; color: #fff;"></h1>
+                <div>
+                    <h1 id="viewTitle" style="font-size: 1.6rem; margin: 0; color: #fff; display:inline-block;"></h1>
+                    <div id="viewKrTitle" style="font-size: 1rem; color: #8a94a6; margin-top: 4px; font-style: italic;"></div>
+                </div>
                 <div class="badge-group">
                     <span id="viewStatusBadge" class="status-badge"></span>
                 </div>
@@ -187,7 +191,10 @@
         </div>
 
         <div id="editModeArea" style="display:none;">
-            <div style="margin-bottom:12px;"><label>漫畫名稱</label><input type="text" id="editTitle" style="width:100%; padding:10px; background:#0f1218; border:1px solid #333; color:white; border-radius:8px; box-sizing:border-box;"></div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom:12px;">
+                <div><label>漫畫名稱</label><input type="text" id="editTitle" style="width:100%; padding:10px; background:#0f1218; border:1px solid #333; color:white; border-radius:8px; box-sizing:border-box;"></div>
+                <div><label>한국어 제목 (韓文名稱)</label><input type="text" id="editKrTitle" style="width:100%; padding:10px; background:#0f1218; border:1px solid #333; color:white; border-radius:8px; box-sizing:border-box;"></div>
+            </div>
             
             <div style="margin-bottom:12px;">
                 <label>閱讀狀態</label>
@@ -223,10 +230,11 @@
                 </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom:12px;">
-                <div><label>원작</label><input type="text" id="editAuthor" style="width:100%; padding:8px; background:#0f1218; border:1px solid #333; color:white; box-sizing:border-box;"></div>
+            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom:12px;">
+                <div><label>제작팀</label><input type="text" id="editStudio" style="width:100%; padding:8px; background:#0f1218; border:1px solid #333; color:white; box-sizing:border-box;"></div>
                 <div><label>글</label><input type="text" id="editAdapter" style="width:100%; padding:8px; background:#0f1218; border:1px solid #333; color:white; box-sizing:border-box;"></div>
                 <div><label>그림</label><input type="text" id="editArtist" style="width:100%; padding:8px; background:#0f1218; border:1px solid #333; color:white; box-sizing:border-box;"></div>
+                <div><label>원작</label><input type="text" id="editAuthor" style="width:100%; padding:8px; background:#0f1218; border:1px solid #333; color:white; box-sizing:border-box;"></div>
                 <div><label>다른 직원</label><input type="text" id="editOther" style="width:100%; padding:8px; background:#0f1218; border:1px solid #333; color:white; box-sizing:border-box;"></div>
             </div>
             
@@ -258,7 +266,6 @@
 
 <script>
     const PLATFORM_CONFIG = { "Ridibooks": "#00a0e9", "Kakao": "#ffcd00", "Naver": "#03cf5d", "Bomtoon": "#ff4d6a", "Lezhin": "#ed1c24", "Comico": "#e60012" };
-    // 🚀 狀態與 CSS 類別對接
     const STATUS_CLASSES = { "連載中": "status-ongoing", "已看完": "status-completed", "休刊": "status-paused", "棄坑": "status-dropped" };
     const DAY_MAP = { "Mon": "월", "Tue": "화", "Wed": "수", "Thu": "목", "Fri": "금", "Sat": "토", "Sun": "일" };
 
@@ -290,6 +297,7 @@
         document.getElementById('filePicker').click();
     }
 
+    // 🚀 重寫篩選器：讓平台選單能即時進行數量統計計數
     function buildDropdownFilters() {
         const platformSelect = document.getElementById('platformFilter');
         const creatorSelect = document.getElementById('creatorFilter');
@@ -301,7 +309,7 @@
         creatorSelect.innerHTML = '<option value="all">🎨 所有創作者</option>';
 
         let creatorsSet = new Set();
-        let platformsSet = new Set();
+        let platformCounts = {};
 
         allReviews.forEach(r => {
             const addSplitCreators = (fieldValue) => {
@@ -312,18 +320,26 @@
                 });
             };
 
+            addSplitCreators(r.studio);
             addSplitCreators(r.author);
             addSplitCreators(r.artist);
             addSplitCreators(r.adapter);
             addSplitCreators(r.other);
             
-            if (r.platforms) r.platforms.forEach(p => platformsSet.add(p.trim()));
+            if (r.platforms) {
+                r.platforms.forEach(p => {
+                    const cleanP = p.trim();
+                    platformCounts[cleanP] = (platformCounts[cleanP] || 0) + 1;
+                });
+            }
         });
 
-        Array.from(platformsSet).sort().forEach(p => { platformSelect.innerHTML += `<option value="${p}">${p}</option>`; });
+        Object.keys(platformCounts).sort().forEach(p => { 
+            platformSelect.innerHTML += `<option value="${p}">${p} (${platformCounts[p]}部)</option>`; 
+        });
         Array.from(creatorsSet).sort().forEach(c => { creatorSelect.innerHTML += `<option value="${c}">${c}</option>`; });
 
-        if (Array.from(platformsSet).includes(prevPlatform)) platformSelect.value = prevPlatform;
+        if (platformSelect.querySelector(`option[value="${prevPlatform}"]`)) platformSelect.value = prevPlatform;
         if (Array.from(creatorsSet).includes(prevCreator)) creatorSelect.value = prevCreator;
     }
 
@@ -376,9 +392,10 @@
 
     function getCreatorsString(data) {
         const parts = [];
-        if (data.author) parts.push(`원작: ${data.author}`);
-        if (data.artist) parts.push(`그림: ${data.artist}`);
+        if (data.studio) parts.push(`제작팀: ${data.studio}`);
         if (data.adapter) parts.push(`글: ${data.adapter}`);
+        if (data.artist) parts.push(`그림: ${data.artist}`);
+        if (data.author) parts.push(`원작: ${data.author}`);
         if (data.other) parts.push(`다른 직원: ${data.other}`);
         return parts.join(' / ');
     }
@@ -398,13 +415,12 @@
         }
     }
 
-    // 🚀 統計數量邏輯加入「棄坑」計算
     function updateFilterCounts() {
         let total = allReviews.length;
         let ongoing = allReviews.filter(r => r.status === '連載中' || !r.status).length;
         let completed = allReviews.filter(r => r.status === '已看完').length;
         let paused = allReviews.filter(r => r.status === '休刊').length;
-        let dropped = allReviews.filter(r => r.status === '棄坑').length; // 統計棄坑數
+        let dropped = allReviews.filter(r => r.status === '棄坑').length;
 
         document.getElementById('btn-filter-all').innerText = `全部(${total})`;
         document.getElementById('btn-filter-ongoing').innerText = `連載中(${ongoing})`;
@@ -435,18 +451,20 @@
                     if (!field) return false;
                     return field.split('、').map(n => n.trim()).includes(selectedCreatorFilter);
                 };
-                if (!checkHasCreator(item.author) && !checkHasCreator(item.artist) && !checkHasCreator(item.adapter) && !checkHasCreator(item.other)) {
+                if (!checkHasCreator(item.studio) && !checkHasCreator(item.author) && !checkHasCreator(item.artist) && !checkHasCreator(item.adapter) && !checkHasCreator(item.other)) {
                     return false;
                 }
             }
 
             if (searchQuery !== '') {
                 const matchTitle = (item.title || '').toLowerCase().includes(searchQuery);
+                const matchKrTitle = (item.krTitle || '').toLowerCase().includes(searchQuery); // 🚀 支援搜尋韓文名稱
+                const matchStudio = (item.studio || '').toLowerCase().includes(searchQuery);
                 const matchAuthor = (item.author || '').toLowerCase().includes(searchQuery);
                 const matchArtist = (item.artist || '').toLowerCase().includes(searchQuery);
                 const matchAdapter = (item.adapter || '').toLowerCase().includes(searchQuery);
                 const matchOther = (item.other || '').toLowerCase().includes(searchQuery);
-                if (!matchTitle && !matchAuthor && !matchArtist && !matchAdapter && !matchOther) return false;
+                if (!matchTitle && !matchKrTitle && !matchStudio && !matchAuthor && !matchArtist && !matchAdapter && !matchOther) return false;
             }
             return true;
         });
@@ -489,7 +507,6 @@
                 const statusClass = STATUS_CLASSES[statusText] || "status-ongoing";
                 const creatorsText = getCreatorsString(data);
 
-                // 🚀 合併標籤邏輯支援「連載中 • 🗓️ 화」
                 const badgeHTML = (statusText === '連載中' && data.updateDay) 
                     ? `<span class="status-badge ${statusClass}">${statusText} • 🗓️ ${DAY_MAP[data.updateDay]}</span>`
                     : `<span class="status-badge ${statusClass}">${statusText}</span>`;
@@ -502,9 +519,15 @@
                     dateHTML += `</div>`;
                 }
 
+                // 🚀 卡片內添加韓文名稱渲染邏輯
+                const krTitleHTML = data.krTitle ? `<span class="comic-kr-title">${data.krTitle}</span>` : '';
+
                 card.innerHTML = `
                     <div class="title-wrapper">
-                        <h3 class="comic-title">${data.title || '未命名'}</h3>
+                        <div style="flex:1;">
+                            <h3 class="comic-title" style="display:inline-block;">${data.title || '未命名'}</h3>
+                            ${krTitleHTML}
+                        </div>
                         <div class="badge-group">${badgeHTML}</div>
                     </div>
                     ${creatorsText ? `<div class="info-row">${creatorsText}</div>` : ''}
@@ -523,17 +546,20 @@
         currentEditIndex = index;
         const data = allReviews[index];
         selectedPlatforms = [...(data.platforms || [])];
-        selectedStatusValue = data.status || "連載中";
+        selectedStatusValue = data.status || "連載중";
         selectedUpdateDay = data.updateDay || "";
 
         document.getElementById('viewTitle').innerText = data.title || '未命名';
+        // 🚀 檢視 Modal 寫入韓文標題
+        document.getElementById('viewKrTitle').innerText = data.krTitle ? `원제: ${data.krTitle}` : '';
+        
         const creatorsText = getCreatorsString(data);
         document.getElementById('viewDetails').innerHTML = creatorsText ? creatorsText : '<span style="color:#555;">未填寫創作者資訊</span>';
         document.getElementById('viewComment').innerText = data.comment || '';
         document.getElementById('viewStars').innerText = '★'.repeat(data.rating || 0);
         document.getElementById('viewPlatforms').innerHTML = selectedPlatforms.map(p => `<span class="tag" style="--tag-color: ${PLATFORM_CONFIG[p] || '#ccc'}">[${p}]</span>`).join('');
 
-        document.getElementById('viewStartDate').innerText = data.startDate ? `시작：${data.startDate}` : '시작：未紀錄';
+        document.getElementById('viewStartDate').innerText = data.startDate ? `시작：${data.startDate}` : '';
         document.getElementById('viewEndDate').innerText = data.endDate ? `끝내다：${data.endDate}` : '';
 
         const badge = document.getElementById('viewStatusBadge');
@@ -545,6 +571,8 @@
         badge.className = `status-badge ${STATUS_CLASSES[selectedStatusValue]}`;
 
         document.getElementById('editTitle').value = data.title || '';
+        document.getElementById('editKrTitle').value = data.krTitle || ''; // 🚀 綁定編輯輸入框
+        document.getElementById('editStudio').value = data.studio || '';
         document.getElementById('editAuthor').value = data.author || '';
         document.getElementById('editAdapter').value = data.adapter || '';
         document.getElementById('editArtist').value = data.artist || '';
@@ -579,10 +607,12 @@
         allReviews[currentEditIndex] = {
             ...allReviews[currentEditIndex],
             title: document.getElementById('editTitle').value,
+            krTitle: document.getElementById('editKrTitle').value, // 🚀 儲存編輯後的韓文標題
             status: selectedStatusValue,
             updateDay: selectedStatusValue === '連載中' ? selectedUpdateDay : '', 
             startDate: document.getElementById('editStartDate').value,
             endDate: document.getElementById('editEndDate').value, 
+            studio: document.getElementById('editStudio').value,
             author: document.getElementById('editAuthor').value,
             adapter: document.getElementById('editAdapter').value,
             artist: document.getElementById('editArtist').value,

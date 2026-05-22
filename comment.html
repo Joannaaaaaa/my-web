@@ -253,11 +253,13 @@
                         hasMore = (comments.length === limit); 
                     }
                     
+                    // 1. 篩選出屬於「我自己的主留言」
                     const myMainComments = comments.filter(c => {
                         const userName = (item.platform === 'webtoon' || item.platform === 'naver') ? c.createdBy?.name : c.user_id;
                         return userName && (userName.startsWith(targetSearch) || userName === targetSearch);
                     });
                     
+                    // 2. 累加自己主留言的按讚數（此處先不直接渲染，交給後面迴圈統整順序輸出）
                     myMainComments.forEach(c => {
                         const m = getMetrics(c, item.platform);
                         totalLikes += m.likes;
@@ -269,12 +271,10 @@
                         console.log(`📌 [${item.platform} 主留言] 👤 ${name} : ${body}`);
                     });
                     
-                    totalFound += myMainComments.length;
-                    renderComments(myMainComments, item, listContainer);
-                    updateUIStats();
-                    
+                    // 3. 收集自己所有主留言的 ID 備用
                     const myMainCommentIds = myMainComments.map(c => (item.platform === 'ridi' ? c.comment_id : c.id));
 
+                    // 4. 開始巡檢整頁的所有主留言，尋找對話流
                     for (const post of comments) {
                         const postId = (item.platform === 'ridi' ? post.comment_id : post.id);
                         const postBody = (item.platform === 'ridi' ? post.content : post.body);
@@ -307,6 +307,7 @@
                                     console.log(`   💬 [${item.platform} 回覆] 👤 ${rName} : ${rBody.substring(0, 50)}`);
                                 });
 
+                                // 💡 【情況 A】：這則主留言是別人的，但「我有在底下回覆別人」
                                 const myRepliesInOthersPost = allReplies.filter(r => {
                                     const name = (item.platform === 'ridi' ? r.user_id : r.createdBy?.name || "");
                                     return (name.startsWith(targetSearch) && !isMyMainPost);
@@ -318,11 +319,21 @@
                                         totalLikes += m.likes; 
                                     });
                                     totalFound += myRepliesInOthersPost.length;
+
+                                    // 先畫出「被我回覆的那個別人的主留言」
+                                    renderComments([post], item, listContainer, null);
+                                    // 緊接著畫出「我的回覆內容卡片」
                                     renderComments(myRepliesInOthersPost, item, listContainer, postBody); 
+                                    
                                     updateUIStats();
                                 }
 
+                                // 💡 【情況 B】：這則主留言是我寫的，而且「有別人跑來回覆我」
                                 if (isMyMainPost) {
+                                    // 🎯 修正：不論有沒有實際抓到回覆，只要是我發的主留言，就立刻渲染出來！
+                                    renderComments([post], item, listContainer, null);
+                                    totalFound += 1; 
+
                                     if (allReplies.length > 0) {
                                         totalReplies += allReplies.length; 
                                         
@@ -331,14 +342,28 @@
                                             totalLikes += m.likes;
                                         });
 
+                                        // 緊接著在下方渲染所有實際存在的「別人回覆我的內容」
                                         renderComments(allReplies, item, listContainer, postBody);
-                                        updateUIStats();
                                     }
+                                    updateUIStats();
                                 }
                             } catch (replyErr) {
                                 console.error(`回覆解析錯誤 (PostID: ${postId}):`, replyErr);
                             }
                         }
+                    }
+                    
+                    // 5. 【獨立主留言防呆】：渲染那些「完全沒有回覆、孤零零」的我自己的主留言
+                    const noReplyMainComments = myMainComments.filter(c => {
+                        const cId = (item.platform === 'ridi' ? c.comment_id : c.id);
+                        const hasReplies = (item.platform === 'ridi' ? c.reply_count > 0 : c.childPostCount > 0);
+                        return !hasReplies;
+                    });
+                    
+                    if (noReplyMainComments.length > 0) {
+                        totalFound += noReplyMainComments.length;
+                        renderComments(noReplyMainComments, item, listContainer);
+                        updateUIStats();
                     }
                     
                     if (hasMore) {
@@ -356,6 +381,7 @@
 
     function renderComments(list, item, container, parentBody = null) {
         list.forEach(c => {
+            console.log(c)
             const card = document.createElement('div');
             card.className = 'comment-card' + (parentBody ? ' reply-card' : '');
             
@@ -369,10 +395,10 @@
             const metrics = getMetrics(c, item.platform);
             
             // 完美讀取作品名稱
-            const workTitle = item.title ? `${item.title} (第 ${item.volume} 話)` : `作品 ID: ${item.id}`;
+            const workTitle = item.title ? `${item.title} (＃${item.volume})` : `作品 ID: ${item.id}`;
 
             card.innerHTML = `
-                ${isBest ? '<div class="best-badge" style="z-index: 10;">👑 BEST</div>' : ''}
+                ${isBest ? '<div class="best-badge" style="z-index: 10;">BEST</div>' : ''}
                 
                 <div style="font-size: 0.85rem; color: #95a5a6; margin-bottom: 12px; font-weight: bold; display: flex; align-items: center; flex-wrap: wrap; gap: 6px;">
                     <span class="platform-tag ${isWT ? 'wt-tag' : 'ridi-tag'}" style="margin-left: 0; padding: 3px 8px; font-size: 0.75rem; font-weight: bold; border-radius: 6px;">${item.platform.toUpperCase()}</span>

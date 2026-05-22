@@ -13,13 +13,13 @@
             --status-ongoing: #2ecc71;
             --status-completed: #3498db;
             --status-paused: #95a5a6;
-            --status-dropped: #e67e22; /* 🚀 棄坑狀態顏色 */
+            --status-dropped: #e67e22;
         }
         body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
         .nav { margin-bottom: 20px; }
         .nav a { color: var(--primary); text-decoration: none; font-weight: bold; }
         
-        .card { background: var(--card-bg); border-radius: 12px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); max-width: 650px; margin: auto; border: 1px solid #333; box-sizing: border-box; }
+        .card { background: var(--card-bg); border-radius: 12px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); max-width: 750px; margin: auto; border: 1px solid #333; box-sizing: border-box; }
         h2 { border-left: 4px solid var(--primary); padding-left: 10px; margin-top: 0; }
 
         .field { margin-bottom: 20px; }
@@ -31,7 +31,7 @@
         }
         textarea { resize: vertical; }
 
-        .team-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+        .team-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
 
         .selector-group { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px; }
         .select-option { padding: 8px 15px; border-radius: 6px; cursor: pointer; border: 2px solid #444; font-size: 0.85rem; transition: all 0.2s; background: #242831; color: #888; font-weight: bold; }
@@ -61,9 +61,15 @@
 <div class="card">
     <h2>漫畫評論編輯</h2>
     
-    <div class="field">
-        <label>漫畫名稱</label>
-        <input type="text" id="title" placeholder="例如：上流社會 (64)">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;" class="field">
+        <div>
+            <label>漫畫名稱</label>
+            <input type="text" id="title" placeholder="例如：上流社會 (64)">
+        </div>
+        <div>
+            <label>한국어 제목 (韓文名稱)</label>
+            <input type="text" id="krTitle" placeholder="예: 상류사회">
+        </div>
     </div>
 
     <div class="field">
@@ -101,9 +107,10 @@
     </div>
 
     <div class="team-grid">
-        <div class="field"><label>원작</label><input type="text" id="author" placeholder="원작"></div>
+        <div class="field"><label>제작팀</label><input type="text" id="studio" placeholder="제작팀"></div>
         <div class="field"><label>글</label><input type="text" id="adapter" placeholder="글"></div>
         <div class="field"><label>그림</label><input type="text" id="artist" placeholder="그림"></div>
+        <div class="field"><label>원작</label><input type="text" id="author" placeholder="원작"></div>
         <div class="field"><label>다른 직원</label><input type="text" id="other" placeholder="다른 직원"></div>
     </div>
 
@@ -144,7 +151,6 @@
     let selectedUpdateDay = "";
 
     window.onload = () => {
-        document.getElementById('startDate').value = new Date().toISOString().split('T')[0];
         initPlatformSelector();
         selectStatus(selectedStatusValue);
         loadDraft();
@@ -193,10 +199,12 @@
 
         const newReview = {
             title: title,
+            krTitle: document.getElementById('krTitle').value, // 🚀 綁定儲存
             status: selectedStatusValue,
             updateDay: selectedStatusValue === '連載中' ? selectedUpdateDay : '', 
             startDate: document.getElementById('startDate').value,
             endDate: document.getElementById('endDate').value, 
+            studio: document.getElementById('studio').value,
             author: document.getElementById('author').value,
             adapter: document.getElementById('adapter').value,
             artist: document.getElementById('artist').value,
@@ -220,6 +228,8 @@
         if (saved) {
             const data = JSON.parse(saved);
             document.getElementById('title').value = data.title || '';
+            document.getElementById('krTitle').value = data.krTitle || ''; // 🚀 綁定讀取草稿
+            document.getElementById('studio').value = data.studio || '';
             document.getElementById('author').value = data.author || '';
             document.getElementById('adapter').value = data.adapter || '';
             document.getElementById('artist').value = data.artist || '';
@@ -243,10 +253,12 @@
     function saveDraftTrigger() {
         const draft = {
             title: document.getElementById('title').value,
+            krTitle: document.getElementById('krTitle').value, // 🚀 綁定即時暫存
             status: selectedStatusValue,
             updateDay: selectedUpdateDay,
             startDate: document.getElementById('startDate').value,
             endDate: document.getElementById('endDate').value,
+            studio: document.getElementById('studio').value,
             author: document.getElementById('author').value,
             adapter: document.getElementById('adapter').value,
             artist: document.getElementById('artist').value,
