@@ -24,17 +24,21 @@
 
         #filePicker { display: none; }
         
-        /* 週曆看板樣式 */
+        /* 🚀 週曆看板樣式優化 */
         .weekly-dashboard { background: #15181f; padding: 15px; border-radius: 12px; border: 1px solid #2d3139; margin-bottom: 20px; font-size: 0.9rem; }
-        .weekly-row { display: flex; margin-bottom: 8px; line-height: 1.6; align-items: flex-start; }
+        .weekly-row { display: flex; margin-bottom: 12px; line-height: 1.6; align-items: flex-start; }
         .weekly-row:last-child { margin-bottom: 0; }
-        .weekly-day { font-weight: bold; color: #a1a1aa; min-width: 25px; text-align: center; margin-right: 10px; background: #242831; border-radius: 4px; padding: 0 4px; }
-        .weekly-comics { display: flex; flex-wrap: wrap; gap: 4px 6px; color: #888; align-items: center; }
+        .weekly-day { font-weight: bold; color: #a1a1aa; min-width: 25px; text-align: center; margin-right: 12px; background: #242831; border-radius: 4px; padding: 2px 4px; margin-top: 2px; }
+        .weekly-comics { display: flex; flex-wrap: wrap; gap: 6px 10px; color: #888; align-items: center; flex: 1; }
         
+        /* 🚀 平台分類群組與分隔斜線的樣式 */
+        .weekly-platform-group { display: inline-flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+        .weekly-separator { color: #3a3f4d; font-weight: normal; margin: 0 2px; font-size: 0.85rem; }
+
         .weekly-comic-item { 
             font-weight: bold; cursor: pointer; display: inline-block;
             background: var(--comic-color, #3498db); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0 0 2px var(--shadow-color, rgba(52,152,219,0.4))); transition: opacity 0.2s;
+            filter: drop-shadow(0 0 1px var(--shadow-color, rgba(255,255,255,0.1))); transition: opacity 0.2s;
         }
         .weekly-comic-item:hover { opacity: 0.8; text-decoration: underline; }
 
@@ -49,7 +53,7 @@
         .stats-table td { padding: 6px 4px; border: 1px solid #2d3139; color: #ecf0f1; }
         .stats-table tr:hover td { background: rgba(255,255,255,0.02); }
         .stats-highlight { font-weight: bold; color: var(--primary); }
-        .stats-total-row { background: #242831; font-weight: bold; } /* Total 行底色加深區隔 */
+        .stats-total-row { background: #242831; font-weight: bold; } 
         .stats-zero { color: #444; }
 
         /* 備忘錄區 */
@@ -298,7 +302,7 @@
             </div>
             <div class="form-grid-3">
                 <div><label>글 (編劇/腳本)</label><input type="text" id="editAdapter" style="width:100%; padding:8px; background:#0f1218; border:1px solid #333; color:white; box-sizing:border-box;"></div>
-                <div><label>콘提 (分鏡)</label><input type="text" id="editStoryboard" style="width:100%; padding:8px; background:#0f1218; border:1px solid #333; color:white; box-sizing:border-box;"></div>
+                <div><label>콘티 (分鏡)</label><input type="text" id="editStoryboard" style="width:100%; padding:8px; background:#0f1218; border:1px solid #333; color:white; box-sizing:border-box;"></div>
                 <div><label>그림 (作畫)</label><input type="text" id="editArtist" style="width:100%; padding:8px; background:#0f1218; border:1px solid #333; color:white; box-sizing:border-box;"></div>
             </div>
             <div class="form-grid-3">
@@ -472,17 +476,13 @@
         return title.replace(/[\（\xFF08].*$/g, '').trim();
     }
 
-    /**
-     * 📊 核心交叉矩陣數據計算統計引擎 (僅保留狀態表的 Total 統計)
-     */
     function renderStatsDashboard() {
         const platforms = ["Ridibooks", "Kakao", "Naver", "Bomtoon", "Lezhin", "Comico"];
         const statuses = ["連載中", "已看完", "休刊", "棄坑"];
         const ratings = [5, 4, 3, 2, 1];
 
-        // 1. 初始化計數結構
         let statusMatrix = {};
-        let statusTotals = {}; // 僅紀錄狀態表平台的加總
+        let statusTotals = {}; 
         platforms.forEach(p => statusTotals[p] = 0);
 
         statuses.forEach(s => {
@@ -496,7 +496,6 @@
             platforms.forEach(p => ratingMatrix[r][p] = 0);
         });
 
-        // 2. 遍歷數據並加總
         allReviews.forEach(review => {
             const currentStatus = review.status || "連載中";
             const currentRating = parseInt(review.rating || 0);
@@ -504,12 +503,10 @@
 
             reviewPlatforms.forEach(p => {
                 if (platforms.includes(p)) {
-                    // 累加狀態與狀態總計
                     if (statusMatrix[currentStatus]) {
                         statusMatrix[currentStatus][p]++;
                         statusTotals[p]++;
                     }
-                    // 僅累加評分星等（不計算評分總計）
                     if (currentRating >= 1 && currentRating <= 5) {
                         ratingMatrix[currentRating][p]++;
                     }
@@ -517,7 +514,6 @@
             });
         });
 
-        // 3. 渲染狀態統計表格
         const statusBody = document.getElementById('statusStatsBody');
         statusBody.innerHTML = '';
         statuses.forEach(s => {
@@ -530,7 +526,6 @@
             statusBody.innerHTML += rowHtml;
         });
         
-        // 🚀 保留狀態表的 Total 列
         let statusTotalHtml = `<tr class="stats-total-row"><td style="color:var(--primary);">Total</td>`;
         platforms.forEach(p => {
             statusTotalHtml += `<td>${statusTotals[p]}</td>`;
@@ -538,7 +533,6 @@
         statusTotalHtml += `</tr>`;
         statusBody.innerHTML += statusTotalHtml;
 
-        // 4. 渲染星等統計表格
         const ratingBody = document.getElementById('ratingStatsBody');
         ratingBody.innerHTML = '';
         ratings.forEach(r => {
@@ -550,7 +544,6 @@
             rowHtml += `</tr>`;
             ratingBody.innerHTML += rowHtml;
         });
-        // 🚀 已移除星等表的 Total 列，保持最乾淨的樣貌
     }
 
     function generateSmartRelationString(currentReview) {
@@ -593,12 +586,15 @@
         JOB_KEYS.forEach(job => {
             const val = currentReview[job.key];
             if (val && val.trim()) {
-                parts.push(`<b>${job.label}</b>: ${val.trim()}`);
+                parts.push('<b>' + job.label + '</b>: ' + val.trim());
             }
         });
         return parts.join(separator);
     }
 
+    /**
+     * 🚀 優化：多平台硬切換顏色配置（取代漸層效果）
+     */
     function getPlatformStyleProperties(platforms) {
         const validPlatforms = (platforms || []).filter(p => PLATFORM_CONFIG[p]);
         if (validPlatforms.length === 0) {
@@ -607,10 +603,21 @@
             const pureColor = PLATFORM_CONFIG[validPlatforms[0]];
             return { color: pureColor, shadow: pureColor };
         } else {
-            const colorStops = validPlatforms.map(p => PLATFORM_CONFIG[p]).join(', ');
-            const gradientStr = `linear-gradient(90deg, ${colorStops})`;
+            // 多個平台時：不再使用漸層漸變，改用多重條紋色標硬切換顏色
+            const total = validPlatforms.length;
+            const percentStep = 100 / total;
+            let gradientStops = [];
+            
+            validPlatforms.forEach((p, idx) => {
+                const color = PLATFORM_CONFIG[p];
+                const start = idx * percentStep;
+                const end = (idx + 1) * percentStep;
+                gradientStops.push(`${color} ${start}%`, `${color} ${end}%`);
+            });
+            
+            const sharpGradientStr = 'linear-gradient(90deg, ' + gradientStops.join(', ') + ')';
             const firstColor = PLATFORM_CONFIG[validPlatforms[0]];
-            return { color: gradientStr, shadow: firstColor };
+            return { color: sharpGradientStr, shadow: firstColor };
         }
     }
 
@@ -632,8 +639,8 @@
         updateFilterCounts();
         renderStatsDashboard(); 
 
-        Object.keys(DAY_MAP).forEach(day => { document.getElementById(`panel-${day}`).innerHTML = ''; });
-        let weekCounts = { Mon:0, Tue:0, Wed:0, Thu:0, Fri:0, Sat:0, Sun:0 };
+        // 清空週曆看板
+        Object.keys(DAY_MAP).forEach(day => { document.getElementById('panel-' + day).innerHTML = ''; });
 
         const gallery = document.getElementById('gallery');
         gallery.innerHTML = '';
@@ -658,31 +665,76 @@
             return true;
         });
 
-        allReviews.forEach((data, realIndex) => {
-            const currentStatus = data.status || '連載中';
-            if (currentStatus === '連載中' && data.updateDay && DAY_MAP[data.updateDay]) {
-                const panel = document.getElementById(`panel-${data.updateDay}`);
-                if (weekCounts[data.updateDay] > 0) panel.appendChild(document.createTextNode('、'));
-                
-                const itemSpan = document.createElement('span');
-                itemSpan.className = 'weekly-comic-item';
-                itemSpan.innerText = cleanTitleBrackets(data.title) || '未命名';
-                
-                const styleConfig = getPlatformStyleProperties(data.platforms);
-                itemSpan.style.setProperty('--comic-color', styleConfig.color);
-                itemSpan.style.setProperty('--shadow-color', styleConfig.shadow);
-                
-                itemSpan.onclick = (e) => { e.stopPropagation(); openModal(realIndex); };
-                panel.appendChild(itemSpan);
-                weekCounts[data.updateDay]++;
+        // 🚀 核心重構：週曆看板按每日 -> 再按平台整理顯示
+        Object.keys(DAY_MAP).forEach(dayCode => {
+            const panel = document.getElementById('panel-' + dayCode);
+            
+            // 找出今天所有連載中的作品
+            const todayComics = allReviews.filter(r => (r.status || '連載中') === '連載中' && r.updateDay === dayCode);
+            
+            if (todayComics.length === 0) {
+                panel.innerText = '-';
+                return;
             }
+
+            // 按平台將作品分類：{"Bomtoon": [comic1, comic2], "Naver": [comic3], "多平台/未指定": []}
+            let platformBuckets = {};
+            todayComics.forEach(comic => {
+                const pfList = comic.platforms || [];
+                if (pfList.length === 0) {
+                    if (!platformBuckets['未指定']) platformBuckets['未指定'] = [];
+                    platformBuckets['未指定'].push(comic);
+                } else if (pfList.length === 1) {
+                    const pName = pfList[0];
+                    if (!platformBuckets[pName]) platformBuckets[pName] = [];
+                    platformBuckets[pName].push(comic);
+                } else {
+                    // 同時擁有多個平台的作品，合成一個分類群組，如 "Ridibooks+Bomtoon"
+                    const jointName = pfList.join('+');
+                    if (!platformBuckets[jointName]) platformBuckets[jointName] = [];
+                    platformBuckets[jointName].push(comic);
+                }
+            });
+
+            // 依序渲染各平台的群組
+            const bucketKeys = Object.keys(platformBuckets);
+            bucketKeys.forEach((pKey, groupIdx) => {
+                const groupContainer = document.createElement('div');
+                groupContainer.className = 'weekly-platform-group';
+                
+                const comicsInBucket = platformBuckets[pKey];
+                comicsInBucket.forEach((comic, comicIdx) => {
+                    const itemSpan = document.createElement('span');
+                    itemSpan.className = 'weekly-comic-item';
+                    itemSpan.innerText = cleanTitleBrackets(comic.title) || '未命名';
+                    
+                    const styleConfig = getPlatformStyleProperties(comic.platforms);
+                    itemSpan.style.setProperty('--comic-color', styleConfig.color);
+                    itemSpan.style.setProperty('--shadow-color', styleConfig.shadow);
+                    
+                    // 綁定點選開啟 Modal
+                    const realIndex = allReviews.findIndex(r => r === comic);
+                    itemSpan.onclick = (e) => { e.stopPropagation(); openModal(realIndex); };
+                    
+                    groupContainer.appendChild(itemSpan);
+                    if (comicIdx < comicsInBucket.length - 1) {
+                        groupContainer.appendChild(document.createTextNode('、'));
+                    }
+                });
+
+                panel.appendChild(groupContainer);
+
+                // 平台與平台群組之間，插入醒目的斜線 / 區隔
+                if (groupIdx < bucketKeys.length - 1) {
+                    const slash = document.createElement('span');
+                    slash.className = 'weekly-separator';
+                    slash.innerText = ' / ';
+                    panel.appendChild(slash);
+                }
+            });
         });
 
-        Object.keys(DAY_MAP).forEach(day => {
-            const panel = document.getElementById(`panel-${day}`);
-            if (weekCounts[day] === 0) panel.innerText = '-';
-        });
-
+        // 渲染主列表卡片區
         if (filteredReviews.length > 0) {
             document.getElementById('emptyMsg').style.display = 'none';
             filteredReviews.forEach((data) => {
