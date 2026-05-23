@@ -19,19 +19,21 @@
         .nav { margin-bottom: 20px; }
         .nav a { color: var(--primary); text-decoration: none; font-weight: bold; }
         
-        .card { background: var(--card-bg); border-radius: 12px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); max-width: 750px; margin: auto; border: 1px solid #333; box-sizing: border-box; }
+        .card { background: var(--card-bg); border-radius: 12px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); max-width: 800px; margin: auto; border: 1px solid #333; box-sizing: border-box; }
         h2 { border-left: 4px solid var(--primary); padding-left: 10px; margin-top: 0; }
 
-        .field { margin-bottom: 20px; }
-        label { display: block; font-weight: bold; margin-bottom: 8px; color: #bdc3c7; font-size: 0.9rem; }
+        .field { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 6px; color: #bdc3c7; font-size: 0.88rem; }
         
         input[type="text"], input[type="number"], input[type="date"], textarea { 
-            width: 100%; padding: 12px; background: #0f1218; border: 1px solid #333; 
-            color: white; border-radius: 8px; box-sizing: border-box; font-family: inherit;
+            width: 100%; padding: 10px; background: #0f1218; border: 1px solid #333; 
+            color: white; border-radius: 8px; box-sizing: border-box; font-family: inherit; font-size: 0.9rem;
         }
         textarea { resize: vertical; }
 
-        .team-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+        /* 擴充為3欄式的網格，填寫更工整 */
+        .team-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 5px; }
+        .team-grid-2 { display: grid; grid-template-columns: 1fr 2fr; gap: 12px; margin-bottom: 5px; }
 
         .selector-group { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px; }
         .select-option { padding: 8px 15px; border-radius: 6px; cursor: pointer; border: 2px solid #444; font-size: 0.85rem; transition: all 0.2s; background: #242831; color: #888; font-weight: bold; }
@@ -97,21 +99,36 @@
 
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;" class="field">
         <div>
-            <label>시작</label>
+            <label>시작 (開始)</label>
             <input type="date" id="startDate">
         </div>
         <div>
-            <label>끝내다</label>
+            <label>끝내다 (結束)</label>
             <input type="date" id="endDate">
         </div>
     </div>
 
-    <div class="team-grid">
-        <div class="field"><label>제작팀</label><input type="text" id="studio" placeholder="제작팀"></div>
-        <div class="field"><label>글</label><input type="text" id="adapter" placeholder="글"></div>
-        <div class="field"><label>그림</label><input type="text" id="artist" placeholder="그림"></div>
-        <div class="field"><label>원작</label><input type="text" id="author" placeholder="원작"></div>
-        <div class="field"><label>다른 직원</label><input type="text" id="other" placeholder="다른 직원"></div>
+    <div class="team-grid-3">
+        <div class="field"><label>제작팀 (製作團隊)</label><input type="text" id="studio" placeholder="團隊或工作室"></div>
+        <div class="field"><label>PD (監製)</label><input type="text" id="pd" placeholder="PD"></div>
+        <div class="field"><label>원작 (原著)</label><input type="text" id="author" placeholder="原小說作者"></div>
+    </div>
+    
+    <div class="team-grid-3">
+        <div class="field"><label>글 (編劇/腳本)</label><input type="text" id="adapter" placeholder="腳本改編"></div>
+        <div class="field"><label>콘티 (分鏡)</label><input type="text" id="storyboard" placeholder="分鏡繪製"></div>
+        <div class="field"><label>그림 (作畫)</label><input type="text" id="artist" placeholder="主筆作畫"></div>
+    </div>
+
+    <div class="team-grid-3">
+        <div class="field"><label>선화 (線稿)</label><input type="text" id="lineart" placeholder="線稿人員"></div>
+        <div class="field"><label>채색 (上色/色彩)</label><input type="text" id="coloring" placeholder="色彩/背景上色"></div>
+        <div class="field"><label>편집 (編輯)</label><input type="text" id="editing" placeholder="後製編輯"></div>
+    </div>
+
+    <div class="team-grid-2">
+        <div class="field"><label>AD (美術指導)</label><input type="text" id="ad" placeholder="AD"></div>
+        <div class="field"><label>다른 직원 (其他工作人員)</label><input type="text" id="other" placeholder="其他協助人員"></div>
     </div>
 
     <div class="field">
@@ -199,15 +216,21 @@
 
         const newReview = {
             title: title,
-            krTitle: document.getElementById('krTitle').value, // 🚀 綁定儲存
+            krTitle: document.getElementById('krTitle').value, 
             status: selectedStatusValue,
             updateDay: selectedStatusValue === '連載中' ? selectedUpdateDay : '', 
             startDate: document.getElementById('startDate').value,
             endDate: document.getElementById('endDate').value, 
             studio: document.getElementById('studio').value,
+            pd: document.getElementById('pd').value,
             author: document.getElementById('author').value,
             adapter: document.getElementById('adapter').value,
+            storyboard: document.getElementById('storyboard').value,
             artist: document.getElementById('artist').value,
+            lineart: document.getElementById('lineart').value,
+            coloring: document.getElementById('coloring').value,
+            editing: document.getElementById('editing').value,
+            ad: document.getElementById('ad').value,
             other: document.getElementById('other').value,
             platforms: selectedPlatforms,
             comment: document.getElementById('comment').value,
@@ -228,11 +251,17 @@
         if (saved) {
             const data = JSON.parse(saved);
             document.getElementById('title').value = data.title || '';
-            document.getElementById('krTitle').value = data.krTitle || ''; // 🚀 綁定讀取草稿
+            document.getElementById('krTitle').value = data.krTitle || ''; 
             document.getElementById('studio').value = data.studio || '';
+            document.getElementById('pd').value = data.pd || '';
             document.getElementById('author').value = data.author || '';
             document.getElementById('adapter').value = data.adapter || '';
+            document.getElementById('storyboard').value = data.storyboard || '';
             document.getElementById('artist').value = data.artist || '';
+            document.getElementById('lineart').value = data.lineart || '';
+            document.getElementById('coloring').value = data.coloring || '';
+            document.getElementById('editing').value = data.editing || '';
+            document.getElementById('ad').value = data.ad || '';
             document.getElementById('other').value = data.other || '';
             document.getElementById('comment').value = data.comment || '';
             if (data.startDate) document.getElementById('startDate').value = data.startDate;
@@ -253,15 +282,21 @@
     function saveDraftTrigger() {
         const draft = {
             title: document.getElementById('title').value,
-            krTitle: document.getElementById('krTitle').value, // 🚀 綁定即時暫存
+            krTitle: document.getElementById('krTitle').value, 
             status: selectedStatusValue,
             updateDay: selectedUpdateDay,
             startDate: document.getElementById('startDate').value,
             endDate: document.getElementById('endDate').value,
             studio: document.getElementById('studio').value,
+            pd: document.getElementById('pd').value,
             author: document.getElementById('author').value,
             adapter: document.getElementById('adapter').value,
+            storyboard: document.getElementById('storyboard').value,
             artist: document.getElementById('artist').value,
+            lineart: document.getElementById('lineart').value,
+            coloring: document.getElementById('coloring').value,
+            editing: document.getElementById('editing').value,
+            ad: document.getElementById('ad').value,
             other: document.getElementById('other').value,
             platforms: selectedPlatforms,
             comment: document.getElementById('comment').value,
