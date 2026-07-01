@@ -38,18 +38,53 @@
         }
         .weekly-comic-item:hover { opacity: 0.8; text-decoration: underline; }
 
-        /* 數據統計看板樣式 */
-        .stats-dashboard { background: #15181f; padding: 15px; border-radius: 12px; border: 1px solid #2d3139; margin-bottom: 20px; }
+        /* 數據統計看板樣式 - 加強手機版防溢出處理 */
+        .stats-dashboard { 
+            background: #15181f; 
+            padding: 15px; 
+            border-radius: 12px; 
+            border: 1px solid #2d3139; 
+            margin-bottom: 20px; 
+            box-sizing: border-box; 
+            overflow: hidden; /* 防止子元素在極端狀況下爆開 */
+        }
         .stats-title { font-size: 0.95rem; font-weight: bold; color: var(--primary); margin-top: 0; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
-        .stats-tables-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        @media (max-width: 768px) { .stats-tables-container { grid-template-columns: 1fr; } }
         
-        .stats-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; text-align: center; background: #1a1d24; border-radius: 8px; overflow: hidden; }
+        /* 改為一個可橫向滾動的容器包裝 */
+        .stats-tables-container { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 15px; 
+        }
+        
+        /* 關鍵：當螢幕小於 768px 時，改為單欄，並允許內部表格各自橫向滾動 */
+        @media (max-width: 768px) { 
+            .stats-tables-container { 
+                grid-template-columns: 1fr; 
+            }
+            .stats-table-wrapper {
+                width: 100%;
+                overflow-x: auto; /* 寬度不夠時，內部可以左右滑動，不會撐開外牆 */
+                -webkit-overflow-scrolling: touch;
+                border-radius: 8px;
+            }
+        }
+        
+        /* 表格設定：加上 min-width 確保在小螢幕下不擠壓變形 */
+        .stats-table { 
+            width: 100%; 
+            min-width: 310px; /* 限制最低寬度，確保內容字體排版工整 */
+            border-collapse: collapse; 
+            font-size: 0.82rem; 
+            text-align: center; 
+            background: #1a1d24; 
+            overflow: hidden; 
+        }
         .stats-table th { background: #242831; color: #a1a1aa; font-weight: bold; padding: 6px 4px; border: 1px solid #2d3139; }
         .stats-table td { padding: 6px 4px; border: 1px solid #2d3139; color: #ecf0f1; }
         .stats-table tr:hover td { background: rgba(255,255,255,0.02); }
         .stats-highlight { font-weight: bold; color: var(--primary); }
-        .stats-total-row { background: #242831; font-weight: bold; } /* Total 行底色加深區隔 */
+        .stats-total-row { background: #242831; font-weight: bold; }
         .stats-zero { color: #444; }
 
         /* 備忘錄區 */
@@ -157,7 +192,7 @@
     <div class="stats-dashboard">
         <div class="stats-title">📊 各平台數據交叉統計看板</div>
         <div class="stats-tables-container">
-            <div>
+            <div class="stats-table-wrapper">
                 <table class="stats-table" id="statusStatsTable">
                     <thead>
                         <tr>
@@ -166,14 +201,13 @@
                             <th>Kakao</th>
                             <th>Naver</th>
                             <th>Bom</th>
-                            <th>Lezhin</th>
-                            <th>Comico</th>
                         </tr>
                     </thead>
                     <tbody id="statusStatsBody"></tbody>
                 </table>
             </div>
-            <div>
+            
+            <div class="stats-table-wrapper">
                 <table class="stats-table" id="ratingStatsTable">
                     <thead>
                         <tr>
@@ -182,8 +216,6 @@
                             <th>Kakao</th>
                             <th>Naver</th>
                             <th>Bom</th>
-                            <th>Lezhin</th>
-                            <th>Comico</th>
                         </tr>
                     </thead>
                     <tbody id="ratingStatsBody"></tbody>
@@ -254,7 +286,7 @@
         <div id="editModeArea" style="display:none;">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom:12px;">
                 <div><label>漫畫名稱</label><input type="text" id="editTitle" style="width:100%; padding:10px; background:#0f1218; border:1px solid #333; color:white; border-radius:8px; box-sizing:border-box;"></div>
-                <div><label>한국어 제목 (韓文名稱)</label><input type="text" id="editKrTitle" style="width:100%; padding:10px; background:#0f1218; border:1px solid #333; color:white; border-radius:8px; box-sizing:border-box;"></div>
+                <div><label>한국어 제목</label><input type="text" id="editKrTitle" style="width:100%; padding:10px; background:#0f1218; border:1px solid #333; color:white; border-radius:8px; box-sizing:border-box;"></div>
             </div>
             
             <div style="margin-bottom:12px;">
@@ -338,7 +370,7 @@
 </div>
 
 <script>
-    const PLATFORM_CONFIG = { "Ridibooks": "#00a0e9", "Kakao": "#ffcd00", "Naver": "#03cf5d", "Bomtoon": "#ff4d6a", "Lezhin": "#ed1c24", "Comico": "#e60012" };
+    const PLATFORM_CONFIG = { "Ridibooks": "#00a0e9", "Kakao": "#ffcd00", "Naver": "#03cf5d", "Bomtoon": "#ff4d6a"};
     const STATUS_CLASSES = { "連載中": "status-ongoing", "已看完": "status-completed", "休刊": "status-paused", "棄坑": "status-dropped" };
     const DAY_MAP = { "Mon": "월", "Tue": "화", "Wed": "수", "Thu": "목", "Fri": "금", "Sat": "토", "Sun": "일" };
 
@@ -476,7 +508,7 @@
      * 📊 核心交叉矩陣數據計算統計引擎 (僅保留狀態表的 Total 統計)
      */
     function renderStatsDashboard() {
-        const platforms = ["Ridibooks", "Kakao", "Naver", "Bomtoon", "Lezhin", "Comico"];
+        const platforms = ["Ridibooks", "Kakao", "Naver", "Bomtoon"];
         const statuses = ["連載中", "已看完", "休刊", "棄坑"];
         const ratings = [5, 4, 3, 2, 1];
 
