@@ -231,7 +231,7 @@
             const targetSearch = item.targetName;
 
             while (hasMore) {
-                statusText.innerHTML = `🔍 正在搜尋 <b>${item.platform}</b> (${targetSearch}) 話次: ${item.id}...`;
+                statusText.innerHTML = `🔍 正在搜尋 <b>${escapeHtml(item.platform)}</b> (${escapeHtml(targetSearch)}) 話次: ${escapeHtml(item.id)}...`;
                 try {
                     const url = `${API_BASE_URL}/get-comments?bookId=${item.id}&limit=${limit}&platform=${item.platform}&offsetPostId=${lastPostId}&offset=${offset}`;
                     console.log("running: "+url)
@@ -303,7 +303,7 @@
 
                                 allReplies.forEach(r => {
                                     const rName = (item.platform === 'ridi') ? r.user_id : r.createdBy?.name;
-                                    const rBody = r.content || r.body;
+                                    const rBody = r.content || r.body || '';
                                     console.log(`   💬 [${item.platform} 回覆] 👤 ${rName} : ${rBody.substring(0, 50)}`);
                                 });
 
@@ -379,6 +379,10 @@
         statusText.innerHTML = `✅ 搜尋結束，共找到 ${totalFound} 則相關評論。`;
     }
 
+    function escapeHtml(str) {
+        return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
     function renderComments(list, item, container, parentBody = null) {
         list.forEach(c => {
             console.log(c)
@@ -395,20 +399,20 @@
             const metrics = getMetrics(c, item.platform);
             
             // 完美讀取作品名稱
-            const workTitle = item.title ? `${item.title} (＃${item.volume})` : `作品 ID: ${item.id}`;
+            const workTitle = escapeHtml(item.title ? `${item.title} (＃${item.volume})` : `作品 ID: ${item.id}`);
 
             card.innerHTML = `
                 ${isBest ? '<div class="best-badge" style="z-index: 10;">BEST</div>' : ''}
                 
                 <div style="font-size: 0.85rem; color: #95a5a6; margin-bottom: 12px; font-weight: bold; display: flex; align-items: center; flex-wrap: wrap; gap: 6px;">
-                    <span class="platform-tag ${isWT ? 'wt-tag' : 'ridi-tag'}" style="margin-left: 0; padding: 3px 8px; font-size: 0.75rem; font-weight: bold; border-radius: 6px;">${item.platform.toUpperCase()}</span>
+                    <span class="platform-tag ${isWT ? 'wt-tag' : 'ridi-tag'}" style="margin-left: 0; padding: 3px 8px; font-size: 0.75rem; font-weight: bold; border-radius: 6px;">${escapeHtml(item.platform.toUpperCase())}</span>
                     <span style="color: #f39c12; background: rgba(243, 156, 18, 0.1); padding: 2px 8px; border-radius: 4px;">${workTitle}</span>
                 </div>
                 
 
-                ${parentBody ? `<div class="reply-hint">⤴ 回覆留言：「${parentBody.substring(0, 15)}...」</div>` : ''}
-                <div class="user-info">👤 ${name}</div>
-                <div class="content">${body}</div>
+                ${parentBody ? `<div class="reply-hint">⤴ 回覆留言：「${escapeHtml(parentBody.substring(0, 15))}...」</div>` : ''}
+                <div class="user-info">👤 ${escapeHtml(name)}</div>
+                <div class="content">${escapeHtml(body)}</div>
                 <div class="footer-metrics">
                     <div class="metric-item">👍 ${metrics.likes}</div>
                     ${isWT ? `<div class="metric-item">👎 ${metrics.dislikes}</div>` : ''}

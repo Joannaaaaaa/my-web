@@ -267,12 +267,13 @@
             if (data.startDate) document.getElementById('startDate').value = data.startDate;
             if (data.endDate) document.getElementById('endDate').value = data.endDate;
             
+            selectedPlatforms = data.platforms || [];
+            const rating = parseInt(data.rating) || 0;
+            if (rating >= 1 && rating <= 5) document.getElementById(`star${rating}`).checked = true;
+
             if (data.status) { selectStatus(data.status); }
             if (data.updateDay) { selectDay(data.updateDay); }
-            
-            selectedPlatforms = data.platforms || [];
-            if (data.rating) document.getElementById(`star${data.rating}`).checked = true;
-            
+
             document.querySelectorAll('#platformSelector .select-option').forEach(opt => {
                 if (selectedPlatforms.includes(opt.innerText)) opt.classList.add('selected');
             });
@@ -300,7 +301,7 @@
             other: document.getElementById('other').value,
             platforms: selectedPlatforms,
             comment: document.getElementById('comment').value,
-            rating: document.querySelector('input[name="rating"]:checked')?.value || 0
+            rating: parseInt(document.querySelector('input[name="rating"]:checked')?.value || 0)
         };
         localStorage.setItem('comic_review_draft', JSON.stringify(draft));
     }

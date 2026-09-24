@@ -398,7 +398,10 @@
 
     window.onload = () => {
         const cachedData = localStorage.getItem('my_review_gallery');
-        if (cachedData) { allReviews = JSON.parse(cachedData); }
+        if (cachedData) {
+            try { allReviews = JSON.parse(cachedData); }
+            catch (err) { alert('本機資料損毀，無法讀取。請用「匯入備份」還原。'); }
+        }
         
         const cachedMemo = localStorage.getItem('my_review_memo');
         if (cachedMemo) { document.getElementById('memoArea').value = cachedMemo; }
@@ -442,14 +445,14 @@
         });
 
         Object.keys(platformCounts).sort().forEach(p => { 
-            platformSelect.innerHTML += `<option value="${p}">${p} (${platformCounts[p]}部)</option>`; 
+            platformSelect.innerHTML += `<option value="${escapeHtml(p)}">${escapeHtml(p)} (${platformCounts[p]}部)</option>`; 
         });
         Array.from(studioSet).sort().forEach(s => { 
-            studioSelect.innerHTML += `<option value="${s}">${s}</option>`; 
+            studioSelect.innerHTML += `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`; 
         });
 
-        if (platformSelect.querySelector(`option[value="${prevPlatform}"]`)) platformSelect.value = prevPlatform;
-        if (studioSelect.querySelector(`option[value="${prevStudio}"]`)) studioSelect.value = prevStudio;
+        if (Array.from(platformSelect.options).some(o => o.value === prevPlatform)) platformSelect.value = prevPlatform;
+        if (Array.from(studioSelect.options).some(o => o.value === prevStudio)) studioSelect.value = prevStudio;
     }
 
     function onFilterChange() { renderGallery(); }
@@ -497,6 +500,10 @@
         document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
         element.classList.add('active');
         renderGallery();
+    }
+
+    function escapeHtml(str) {
+        return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
     function cleanTitleBrackets(title) {
@@ -613,7 +620,7 @@
             });
 
             if (matchedTitles.length > 0) {
-                matchParts.push(`<span class="match-highlight">${job.label}：${matchedTitles.join('、')}</span>`);
+                matchParts.push(`<span class="match-highlight">${job.label}：${escapeHtml(matchedTitles.join('、'))}</span>`);
             }
         });
 
@@ -625,7 +632,7 @@
         JOB_KEYS.forEach(job => {
             const val = currentReview[job.key];
             if (val && val.trim()) {
-                parts.push(`<b>${job.label}</b>: ${val.trim()}`);
+                parts.push(`<b>${job.label}</b>: ${escapeHtml(val.trim())}`);
             }
         });
         return parts.join(separator);
@@ -723,7 +730,7 @@
                 card.className = 'review-card';
                 card.onclick = () => openModal(realIndex);
                 
-                const tagsHtml = (data.platforms || []).map(p => `<span class="tag" style="--tag-color: ${PLATFORM_CONFIG[p] || '#ccc'}">${p}</span>`).join('');
+                const tagsHtml = (data.platforms || []).map(p => `<span class="tag" style="--tag-color: ${PLATFORM_CONFIG[p] || '#ccc'}">${escapeHtml(p)}</span>`).join('');
                 const inlineTagsContainer = tagsHtml ? `<div class="platform-inline">${tagsHtml}</div>` : '';
 
                 const statusText = data.status || "連載中";
@@ -739,17 +746,17 @@
                 let dateHTML = '';
                 if (data.startDate || data.endDate) {
                     dateHTML = `<div class="date-container">`;
-                    if (data.startDate) dateHTML += `<div class="date-row">시작：${data.startDate}</div>`;
-                    if (data.endDate) dateHTML += `<div class="date-row">끝내다：${data.endDate}</div>`;
+                    if (data.startDate) dateHTML += `<div class="date-row">시작：${escapeHtml(data.startDate)}</div>`;
+                    if (data.endDate) dateHTML += `<div class="date-row">끝내다：${escapeHtml(data.endDate)}</div>`;
                     dateHTML += `</div>`;
                 }
 
-                const krTitleHTML = data.krTitle ? `<span class="comic-kr-title">${data.krTitle}</span>` : '';
+                const krTitleHTML = data.krTitle ? `<span class="comic-kr-title">${escapeHtml(data.krTitle)}</span>` : '';
 
                 card.innerHTML = `
                     <div class="title-wrapper">
                         <div style="flex:1;">
-                            <h3 class="comic-title" style="display:inline-block;">${data.title || '未命名'}</h3>
+                            <h3 class="comic-title" style="display:inline-block;">${escapeHtml(data.title || '未命名')}</h3>
                             ${krTitleHTML}
                         </div>
                         <div class="badge-group">
@@ -789,7 +796,7 @@
         document.getElementById('viewDetails').innerHTML = finalDetails;
         document.getElementById('viewComment').innerText = data.comment || '';
         document.getElementById('viewStars').innerText = '★'.repeat(data.rating || 0);
-        document.getElementById('viewPlatforms').innerHTML = selectedPlatforms.map(p => `<span class="tag" style="--tag-color: ${PLATFORM_CONFIG[p] || '#ccc'}">[${p}]</span>`).join('');
+        document.getElementById('viewPlatforms').innerHTML = selectedPlatforms.map(p => `<span class="tag" style="--tag-color: ${PLATFORM_CONFIG[p] || '#ccc'}">[${escapeHtml(p)}]</span>`).join('');
 
         document.getElementById('viewStartDate').innerText = data.startDate ? `시작：${data.startDate}` : '';
         document.getElementById('viewEndDate').innerText = data.endDate ? `끝내다：${data.endDate}` : '';
@@ -894,7 +901,7 @@
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         const now = new Date();
-        const timeStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate())+1}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+        const timeStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
         a.download = `comic_reviews_all_backup_${timeStr}.json`;
         a.style.display = 'none';
         document.body.appendChild(a);
@@ -903,36 +910,50 @@
         URL.revokeObjectURL(a.href);
     }
 
-    UX_Toggle = (edit) => {
+    function toggleUI(edit) {
         document.getElementById('viewModeArea').style.display = edit ? 'none' : 'block';
         document.getElementById('editModeArea').style.display = edit ? 'block' : 'none';
         document.getElementById('editModeBtn').innerText = edit ? '📖 檢視' : '✏️ 編輯內容';
-    };
-    function toggleUI(edit) { UX_Toggle(edit); }
+    }
     function toggleEditMode() { isEditMode = !isEditMode; toggleUI(isEditMode); }
     function closeModal() { document.getElementById('editModal').style.display = 'none'; }
     
-    document.getElementById('filePicker').addEventListener('change', function(e) {
-        Array.from(e.target.files).forEach(file => {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                const imported = JSON.parse(ev.target.result);
-                if (imported.reviews || imported.hasOwnProperty('memo')) {
-                    allReviews = imported.reviews || [];
-                    localStorage.setItem('my_review_memo', imported.memo || "");
-                    document.getElementById('memoArea').value = imported.memo || "";
-                } else {
-                    allReviews = allReviews.concat(Array.isArray(imported) ? imported : [imported]);
-                }
-                localStorage.setItem('my_review_gallery', JSON.stringify(allReviews));
-                buildDropdownFilters();
-                renderGallery();
-            };
-            reader.readAsText(file);
-        });
+    document.getElementById('filePicker').addEventListener('change', async function(e) {
+        const files = Array.from(e.target.files);
+        e.target.value = ''; // 讓同一個檔案可以再次選取
+        for (const file of files) {
+            let imported;
+            try {
+                imported = JSON.parse(await file.text());
+            } catch (err) {
+                alert(`「${file.name}」不是有效的 JSON 檔，已略過。`);
+                continue;
+            }
+            if (imported.reviews || imported.hasOwnProperty('memo')) {
+                const count = (imported.reviews || []).length;
+                if (!confirm(`「${file.name}」是完整備份（${count} 部）。\n匯入會取代目前的 ${allReviews.length} 部漫畫與備忘錄，確定嗎？`)) continue;
+                allReviews = imported.reviews || [];
+                localStorage.setItem('my_review_memo', imported.memo || "");
+                document.getElementById('memoArea').value = imported.memo || "";
+            } else {
+                allReviews = allReviews.concat(Array.isArray(imported) ? imported : [imported]);
+            }
+        }
+        localStorage.setItem('my_review_gallery', JSON.stringify(allReviews));
+        buildDropdownFilters();
+        renderGallery();
     });
 
-    function clearGalleryCache() { if(confirm('確定清除？')) { localStorage.removeItem('my_review_gallery'); localStorage.removeItem('my_review_memo'); allReviews=[]; document.getElementById('memoArea').value=""; renderGallery(); buildDropdownFilters(); } }
+    function clearGalleryCache() {
+        const answer = prompt(`這會刪除全部 ${allReviews.length} 部漫畫與備忘錄，且無法復原。\n建議先下載備份。確定要清除請輸入「刪除」：`);
+        if (answer !== '刪除') return;
+        localStorage.removeItem('my_review_gallery');
+        localStorage.removeItem('my_review_memo');
+        allReviews = [];
+        document.getElementById('memoArea').value = "";
+        renderGallery();
+        buildDropdownFilters();
+    }
 </script>
 </body>
 </html>
