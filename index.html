@@ -72,17 +72,37 @@
         .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin: 12px 0; }
         .panel-title { font-size: 0.95rem; font-weight: bold; color: var(--primary); margin: 0 0 10px; }
 
-        .weekly-row { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--border); }
-        .weekly-row:last-child { border-bottom: none; }
-        .weekly-day { flex-shrink: 0; width: 36px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #a1a1aa; background: var(--raised); border-radius: 6px; font-size: 0.9rem; }
-        .weekly-row.today .weekly-day { background: var(--primary); color: #fff; }
-        .weekly-comics { display: flex; flex-wrap: wrap; gap: 2px 4px; flex: 1; min-height: 30px; align-items: center; color: #555; }
-        .weekly-comic-item {
-            border: none; padding: 4px 6px; cursor: pointer; font: inherit; font-weight: bold; font-size: 0.92rem;
-            background: var(--comic-color, #3498db); -webkit-background-clip: text; background-clip: text;
-            -webkit-text-fill-color: transparent; color: transparent;
-            filter: drop-shadow(0 0 2px var(--shadow-color, rgba(52,152,219,0.4)));
+        /* 本週：星期列 + 當天清單 */
+        .day-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 14px; }
+        .day-btn {
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+            min-height: 56px; border: none; border-radius: 12px; background: transparent; cursor: pointer;
+            color: var(--text-sub); font: inherit; position: relative;
         }
+        .day-btn .day-name { font-size: 0.95rem; font-weight: bold; }
+        .day-btn .day-count { font-size: 0.72rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+        .day-btn.empty .day-name { color: #4a4f5a; }
+        .day-btn.today { box-shadow: inset 0 0 0 1.5px var(--primary); }
+        .day-btn.selected { background: var(--primary); color: #fff; }
+        .day-btn.selected .day-count { color: rgba(255, 255, 255, 0.85); }
+        .day-heading { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+        .day-heading-title { font-weight: bold; font-size: 1rem; }
+        .day-heading-sub { font-size: 0.8rem; color: var(--text-muted); }
+        .day-list { touch-action: pan-y; min-height: 120px; }
+        .day-item {
+            display: flex; align-items: center; gap: 12px; padding: 12px 2px; min-height: 60px;
+            border-bottom: 1px solid var(--border); cursor: pointer;
+        }
+        .day-item:last-child { border-bottom: none; }
+        .day-item:active { background: var(--raised); }
+        .day-item-dots { display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; }
+        .day-item-dots span { width: 8px; height: 8px; border-radius: 50%; }
+        .day-item-main { flex: 1; min-width: 0; }
+        .day-item-title { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .day-item-kr { font-size: 0.8rem; color: #8a94a6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .day-item-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; flex-shrink: 0; max-width: 45%; }
+        .day-empty { color: var(--text-muted); text-align: center; padding: 36px 0; font-size: 0.9rem; }
+        .memo-panel .panel-title { color: var(--text-sub); }
         .memo-textarea { width: 100%; min-height: 120px; background: transparent; border: none; color: var(--text); font-family: inherit; font-size: 16px; line-height: 1.6; resize: none; padding: 0; }
         .memo-textarea:focus { outline: none; }
 
@@ -249,10 +269,14 @@
     <!-- 本週更新 + 備忘錄 -->
     <section class="tab-panel" id="tab-weekly">
         <div class="panel">
-            <div class="panel-title">📅 本週更新</div>
-            <div id="weeklyRows"></div>
+            <div class="day-strip" id="dayStrip" role="tablist" aria-label="選擇星期"></div>
+            <div class="day-heading">
+                <span class="day-heading-title" id="dayHeadingTitle"></span>
+                <span class="day-heading-sub" id="dayHeadingSub"></span>
+            </div>
+            <div class="day-list" id="dayList"></div>
         </div>
-        <div class="panel">
+        <div class="panel memo-panel">
             <div class="panel-title">📝 備忘錄</div>
             <textarea id="memoArea" class="memo-textarea" placeholder="在此輸入日期備忘錄...&#10;例如：Merry phsycho 5/19 (二) webtoon"></textarea>
         </div>
@@ -544,29 +568,61 @@
     }
 
     // ---------- 本週更新 ----------
-    function titleGradient(platforms) {
-        const colors = (platforms || []).filter(p => PLATFORM_CONFIG[p]).map(platformColor);
-        if (colors.length === 0) return { color: '#3498db', shadow: 'rgba(52,152,219,0.4)' };
-        if (colors.length === 1) return { color: colors[0], shadow: colors[0] };
-        return { color: `linear-gradient(90deg, ${colors.join(', ')})`, shadow: colors[0] };
+    const DAY_FULL = { Mon: '월요일', Tue: '화요일', Wed: '수요일', Thu: '목요일', Fri: '금요일', Sat: '토요일', Sun: '일요일' };
+    const DAY_ZH = { Mon: '週一', Tue: '週二', Wed: '週三', Thu: '週四', Fri: '週五', Sat: '週六', Sun: '週日' };
+    const todayCode = () => DAYS[(new Date().getDay() + 6) % 7];
+    let selectedDay = todayCode();
+
+    function comicsOn(day) {
+        return allReviews.map((r, i) => ({ r, i }))
+            .filter(({ r }) => (r.status || DEFAULT_STATUS) === DEFAULT_STATUS && r.updateDay === day);
     }
 
     function renderWeekly() {
-        const today = DAYS[(new Date().getDay() + 6) % 7];
-        document.getElementById('weeklyRows').innerHTML = DAYS.map(day => {
-            const items = allReviews.map((r, i) => ({ r, i }))
-                .filter(({ r }) => (r.status || DEFAULT_STATUS) === DEFAULT_STATUS && r.updateDay === day)
-                .map(({ r, i }) => {
-                    const g = titleGradient(r.platforms);
-                    return `<button class="weekly-comic-item" style="--comic-color: ${g.color}; --shadow-color: ${g.shadow}" onclick="openDetail(${i})">${escapeHtml(cleanTitleBrackets(r.title) || '未命名')}</button>`;
-                });
-            return `
-                <div class="weekly-row ${day === today ? 'today' : ''}">
-                    <span class="weekly-day">${DAY_MAP[day]}</span>
-                    <div class="weekly-comics">${items.length ? items.join('<span>、</span>') : '-'}</div>
-                </div>`;
+        const today = todayCode();
+        document.getElementById('dayStrip').innerHTML = DAYS.map(day => {
+            const n = comicsOn(day).length;
+            const cls = [day === today && 'today', day === selectedDay && 'selected', !n && 'empty'].filter(Boolean).join(' ');
+            return `<button class="day-btn ${cls}" role="tab" aria-selected="${day === selectedDay}" onclick="selectDay('${day}')">
+                <span class="day-name">${DAY_MAP[day]}</span><span class="day-count">${n || '·'}</span></button>`;
         }).join('');
+
+        const items = comicsOn(selectedDay);
+        document.getElementById('dayHeadingTitle').textContent =
+            `${DAY_FULL[selectedDay]}${selectedDay === today ? '・今天' : ''}`;
+        document.getElementById('dayHeadingSub').textContent = items.length ? `${items.length} 部更新` : '';
+        document.getElementById('dayList').innerHTML = items.length ? items.map(({ r, i }) => `
+            <div class="day-item" role="button" tabindex="0" onclick="openDetail(${i})" onkeydown="if (event.key === 'Enter') openDetail(${i})">
+                <div class="day-item-dots">${(r.platforms || []).map(p => `<span style="background: ${platformColor(p)}"></span>`).join('')}</div>
+                <div class="day-item-main">
+                    <div class="day-item-title">${escapeHtml(cleanTitleBrackets(r.title) || '未命名')}</div>
+                    ${r.krTitle ? `<div class="day-item-kr">${escapeHtml(r.krTitle)}</div>` : ''}
+                </div>
+                <div class="day-item-links">${platformLinkTagsHtml(r)}</div>
+            </div>`).join('')
+            : `<div class="day-empty">${DAY_ZH[selectedDay]}沒有連載中的作品</div>`;
     }
+
+    function selectDay(day) {
+        selectedDay = day;
+        renderWeekly();
+    }
+
+    // 在清單上左右滑動切換前一天 / 後一天
+    (() => {
+        const list = document.getElementById('dayList');
+        let startX = null, startY = null;
+        list.addEventListener('touchstart', e => { startX = e.touches[0].clientX; startY = e.touches[0].clientY; }, { passive: true });
+        list.addEventListener('touchend', e => {
+            if (startX === null) return;
+            const dx = e.changedTouches[0].clientX - startX;
+            const dy = e.changedTouches[0].clientY - startY;
+            startX = null;
+            if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+            const idx = DAYS.indexOf(selectedDay);
+            selectDay(DAYS[(idx + (dx < 0 ? 1 : 6)) % 7]);
+        });
+    })();
 
     // ---------- 統計 ----------
     // 堆疊順序讓相鄰色塊在色盲下也能區分（紫色的休刊不緊鄰藍色的已看完）
