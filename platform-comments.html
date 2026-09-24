@@ -2,8 +2,10 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Review</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0f1218">
+    <title>平台留言查詢</title>
+    <link rel="stylesheet" href="common.css">
     <style>
         :root { --primary: #3498db; --bg: #0f1218; --card-bg: #1a1d24; --text: #ecf0f1; --best-green: #27ae60; --reply-gold: #f1c40f; --dislike-red: #e74c3c; }
         body { font-family: 'PingFang TC', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
@@ -97,7 +99,7 @@
             .btn-upload, .select-platform {
                 flex: 1;
                 width: calc(50% - 4px) !important;
-                font-size: 0.9rem;
+                font-size: 16px;
                 padding: 12px;
                 box-sizing: border-box;
             }
@@ -150,6 +152,7 @@
     <div id="commentList"></div>
 </div>
 
+<script src="common.js"></script>
 <script>
     const API_BASE_URL = window.location.protocol === 'https:'
     ? 'https://webtoon-api-e0vg.onrender.com'
@@ -377,10 +380,6 @@
             }
         }
         statusText.innerHTML = `✅ 搜尋結束，共找到 ${totalFound} 則相關評論。`;
-    }
-
-    function escapeHtml(str) {
-        return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
     function renderComments(list, item, container, parentBody = null) {

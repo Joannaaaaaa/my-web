@@ -1,0 +1,108 @@
+/* 共用樣式：色彩、按鈕、標籤、表單元件（手機優先） */
+:root {
+    --primary: #3498db;
+    --bg: #0f1218;
+    --surface: #15181f;
+    --card-bg: #1a1d24;
+    --raised: #242831;
+    --border: #2d3139;
+    --text: #ecf0f1;
+    --text-sub: #bdc3c7;
+    --text-muted: #7f8794;
+    --star: #f1c40f;
+    --danger: #e74c3c;
+    --status-ongoing: #2ecc71;
+    --status-completed: #3498db;
+    --status-paused: #95a5a6;
+    --status-dropped: #e67e22;
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+    font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+    background: var(--bg); color: var(--text);
+    margin: 0; line-height: 1.5;
+    -webkit-tap-highlight-color: transparent;
+}
+button { font-family: inherit; }
+
+/* 按鈕 */
+.btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    min-height: 44px; padding: 0 16px; border: none; border-radius: 10px;
+    font-size: 0.95rem; font-weight: bold; cursor: pointer; color: #fff; background: var(--raised);
+    text-decoration: none;
+}
+.btn:active { opacity: 0.8; }
+.btn-primary { background: var(--primary); }
+.btn-danger { background: #c0392b; }
+.btn-ghost { background: transparent; color: var(--text-sub); }
+.icon-btn {
+    width: 44px; height: 44px; border: none; border-radius: 50%;
+    background: transparent; color: var(--text); font-size: 1.4rem; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.icon-btn:active { background: var(--raised); }
+
+/* 狀態徽章與平台標籤 */
+.status-badge { padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; color: #fff; white-space: nowrap; }
+.status-ongoing { background: var(--status-ongoing); }
+.status-completed { background: var(--status-completed); }
+.status-paused { background: var(--status-paused); }
+.status-dropped { background: var(--status-dropped); }
+.tag {
+    display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: bold;
+    background: rgba(0, 0, 0, 0.4); border: 1px solid var(--tag-color, #ccc); color: var(--tag-color, #ccc);
+}
+
+/* 表單 */
+.form-section { margin-bottom: 20px; }
+.form-label { display: block; font-weight: bold; margin-bottom: 8px; color: var(--text-sub); font-size: 0.88rem; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.input {
+    width: 100%; min-height: 44px; padding: 10px 12px;
+    background: var(--bg); border: 1px solid #333; border-radius: 10px;
+    color: #fff; font-family: inherit;
+    font-size: 16px; /* 16px 以上 iOS 才不會自動放大 */
+}
+.input:focus { outline: none; border-color: var(--primary); }
+textarea.input { resize: vertical; line-height: 1.6; }
+input[type="date"].input { -webkit-appearance: none; appearance: none; }
+
+.chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+    min-height: 40px; padding: 0 14px; border-radius: 20px; border: 2px solid #444;
+    background: var(--raised); color: #999; font-size: 0.9rem; font-weight: bold; cursor: pointer;
+}
+.chip.selected {
+    border-color: var(--opt-color, var(--primary)); color: var(--opt-color, #fff);
+    background: transparent; box-shadow: 0 0 8px var(--opt-color, var(--primary));
+}
+.chip-day { min-width: 44px; padding: 0; }
+
+.star-input { display: flex; gap: 4px; }
+.star-input button {
+    width: 48px; height: 48px; border: none; background: transparent; cursor: pointer;
+    font-size: 34px; line-height: 1; color: #333; padding: 0;
+}
+.star-input button.on { color: var(--star); }
+.form-hint { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
+
+.team-details { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.team-details summary {
+    list-style: none; cursor: pointer; padding: 14px 16px; min-height: 48px;
+    font-weight: bold; color: var(--text-sub); font-size: 0.9rem;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.team-details summary::-webkit-details-marker { display: none; }
+.team-details summary::after { content: '▾'; transition: transform 0.2s; }
+.team-details[open] summary::after { transform: rotate(180deg); }
+.team-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 10px; padding: 0 16px 16px; }
+.team-grid .form-label { font-size: 0.8rem; margin-bottom: 4px; }
+
+@media (min-width: 640px) {
+    .team-grid { grid-template-columns: repeat(3, 1fr); }
+}

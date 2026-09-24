@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0f1218">
+    <title>新增漫畫</title>
+    <link rel="stylesheet" href="common.css">
+    <style>
+        .topbar {
+            position: sticky; top: 0; z-index: 10;
+            display: flex; align-items: center; gap: 4px;
+            padding: 6px 8px; padding-top: calc(6px + env(safe-area-inset-top, 0px));
+            background: rgba(15, 18, 24, 0.92); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+        }
+        .topbar h1 { font-size: 1.1rem; margin: 0; flex: 1; }
+        .page { max-width: 720px; margin: auto; padding: 16px 16px calc(100px + var(--safe-bottom)); }
+        .draft-note { font-size: 0.78rem; color: var(--text-muted); text-align: center; margin-top: 8px; }
+
+        .action-bar {
+            position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+            display: flex; gap: 10px; justify-content: center;
+            padding: 10px 16px calc(10px + var(--safe-bottom));
+            background: rgba(21, 24, 31, 0.96); border-top: 1px solid var(--border);
+        }
+        .action-bar .btn { flex: 1; max-width: 340px; min-height: 48px; }
+        .action-bar .btn-ghost { flex: 0 0 auto; }
+    </style>
+</head>
+<body>
+
+<header class="topbar">
+    <a class="icon-btn" href="index.html" aria-label="返回" style="text-decoration:none; font-size:2.2rem;">‹</a>
+    <h1>新增漫畫</h1>
+</header>
+
+<main class="page">
+    <div id="reviewForm"></div>
+    <div id="draftNote" class="draft-note">草稿會自動保存</div>
+</main>
+
+<div class="action-bar">
+    <button class="btn btn-ghost" onclick="clearData()">清空</button>
+    <button class="btn btn-primary" onclick="saveToGallery()">儲存</button>
+</div>
+
+<script src="common.js"></script>
+<script>
+    const form = createReviewForm(document.getElementById('reviewForm'), {
+        teamOpen: true,
+        onInput: () => {
+            Store.saveDraft(form.getData());
+            document.getElementById('draftNote').textContent = '草稿已保存';
+        },
+    });
+
+    const draft = Store.loadDraft();
+    if (draft) {
+        form.setData(draft);
+        document.getElementById('draftNote').textContent = '已還原上次的草稿';
+    }
+
+    function saveToGallery() {
+        const data = form.getData();
+        if (!data.title.trim()) {
+            alert('請輸入漫畫名稱！');
+            form.focusTitle();
+            return;
+        }
+        const reviews = Store.loadReviews();
+        const now = new Date();
+        reviews.push({ ...data, updatedAt: now.toLocaleString(), updatedAtTs: now.getTime() });
+        Store.saveReviews(reviews);
+        Store.clearDraft();
+        window.location.href = 'index.html';
+    }
+
+    function clearData() {
+        if (!confirm('確定要清空所有欄位嗎？')) return;
+        Store.clearDraft();
+        form.setData({});
+        document.getElementById('draftNote').textContent = '草稿會自動保存';
+        window.scrollTo(0, 0);
+    }
+</script>
+</body>
+</html>
