@@ -196,6 +196,15 @@
         .detail-title { font-size: 1.4rem; margin: 0; line-height: 1.3; }
         .detail-kr { color: #8a94a6; font-style: italic; margin-top: 4px; }
         .detail-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+        .open-links { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+        .open-link {
+            display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px;
+            border-radius: 10px; background: var(--raised); border: 1px solid var(--border);
+            color: var(--text); text-decoration: none; font-size: 0.9rem; font-weight: bold;
+        }
+        .open-link:active { background: var(--border); }
+        .open-link .swatch { width: 10px; height: 10px; border-radius: 3px; }
+        .open-link-icon { color: var(--text-muted); font-size: 0.85rem; }
         .detail-stars { color: var(--star); font-size: 1.3rem; letter-spacing: 1px; }
         .detail-dates { display: flex; gap: 16px; font-size: 0.85rem; margin-bottom: 12px; }
         .comment-text { font-size: 1rem; color: var(--text-sub); line-height: 1.7; white-space: pre-wrap; word-break: break-word; background: var(--raised); padding: 12px 14px; border-radius: 10px; }
@@ -517,7 +526,7 @@
             const relations = findRelations(r).map(g =>
                 `<div><b>🔗 ${g.label}</b>${escapeHtml(g.matches.map(m => m.title).join('、'))}</div>`).join('');
             return `
-                <button class="review-card" onclick="openDetail(${i})">
+                <article class="review-card" role="button" tabindex="0" onclick="openDetail(${i})" onkeydown="if (event.key === 'Enter') openDetail(${i})">
                     <div class="card-top">
                         <div style="min-width:0;">
                             <h3 class="comic-title">${escapeHtml(r.title || '未命名')}</h3>
@@ -525,11 +534,11 @@
                         </div>
                         <div class="card-stars">${starsText(r.rating)}</div>
                     </div>
-                    <div class="card-meta">${statusBadgeHtml(r)} ${platformTagsHtml(r.platforms)}</div>
+                    <div class="card-meta">${statusBadgeHtml(r)} ${platformLinkTagsHtml(r)}</div>
                     ${creators ? `<div class="card-creators">${creators}</div>` : ''}
                     ${relations ? `<div class="card-relations">${relations}</div>` : ''}
                     ${dates ? `<div class="card-dates">${dates}</div>` : ''}
-                </button>`;
+                </article>`;
         }).join('');
         document.getElementById('emptyMsg').hidden = indexes.length > 0;
     }
@@ -717,11 +726,20 @@
                 ${g.matches.map(m => `<button class="relation-link" onclick="openDetail(${m.index}, true)">${escapeHtml(m.title)}</button>`).join('')}
             </div>`).join('');
 
+        const openLinks = (r.platforms || []).map(p => {
+            const link = platformLink(r, p);
+            if (!link) return '';
+            return `<a class="open-link" href="${escapeHtml(link.url)}" target="_blank" rel="noopener" style="--tag-color: ${platformColor(p)}">
+                <span class="swatch" style="background: ${platformColor(p)}"></span>
+                ${link.isSearch ? `在 ${escapeHtml(p)} 搜尋` : `到 ${escapeHtml(p)} 看`}<span class="open-link-icon">${link.isSearch ? '🔍' : '↗'}</span></a>`;
+        }).join('');
+
         document.getElementById('detailHeaderTitle').textContent = r.title || '未命名';
         document.getElementById('viewModeArea').innerHTML = `
             <h2 class="detail-title">${escapeHtml(r.title || '未命名')}</h2>
             ${r.krTitle ? `<div class="detail-kr">원제: ${escapeHtml(r.krTitle)}</div>` : ''}
-            <div class="detail-meta">${statusBadgeHtml(r)} ${platformTagsHtml(r.platforms)}</div>
+            <div class="detail-meta">${statusBadgeHtml(r)} ${openLinks ? '' : platformTagsHtml(r.platforms)}</div>
+            ${openLinks ? `<div class="open-links">${openLinks}</div>` : ''}
             <div class="detail-stars">${starsText(r.rating)}</div>
             ${(r.startDate || r.endDate) ? `<div class="detail-dates">
                 ${r.startDate ? `<span style="color:#2ecc71;">시작 ${escapeHtml(r.startDate)}</span>` : ''}

@@ -1,10 +1,11 @@
 // 共用設定、資料存取與漫畫表單元件（index.html、add.html 共用）
 
+// search：沒有填作品網址時，用韓文標題搜尋的網址
 const PLATFORM_CONFIG = {
-    "Ridibooks": { color: "#00a0e9", short: "Ridi" },
-    "Kakao": { color: "#ffcd00", short: "Kakao" },
-    "Naver": { color: "#03cf5d", short: "Naver" },
-    "Bomtoon": { color: "#ff4d6a", short: "Bom" },
+    "Ridibooks": { color: "#00a0e9", short: "Ridi", search: kw => `https://ridibooks.com/search?q=${kw}` },
+    "Kakao": { color: "#ffcd00", short: "Kakao", search: kw => `https://page.kakao.com/search/result?keyword=${kw}` },
+    "Naver": { color: "#03cf5d", short: "Naver", search: kw => `https://comic.naver.com/search?keyword=${kw}` },
+    "Bomtoon": { color: "#ff4d6a", short: "Bom", search: kw => `https://www.bomtoon.com/search?q=${kw}` },
 };
 const PLATFORMS = Object.keys(PLATFORM_CONFIG);
 
@@ -63,6 +64,26 @@ function platformColor(name) {
 
 function platformTagsHtml(platforms) {
     return (platforms || []).map(p => `<span class="tag" style="--tag-color: ${platformColor(p)}">${escapeHtml(p)}</span>`).join(' ');
+}
+
+// 回傳 { url, isSearch }；有填作品網址就用網址，否則用韓文（或中文）標題搜尋
+function platformLink(review, platform) {
+    const saved = (review.links || {})[platform];
+    if (saved && /^https?:\/\//i.test(saved)) return { url: saved, isSearch: false };
+    const config = PLATFORM_CONFIG[platform];
+    const keyword = (review.krTitle || '').trim() || cleanTitleBrackets(review.title);
+    if (!config || !keyword) return null;
+    return { url: config.search(encodeURIComponent(keyword)), isSearch: true };
+}
+
+// 可點的平台標籤：直接連結顯示 ↗，搜尋顯示 🔍
+function platformLinkTagsHtml(review) {
+    return (review.platforms || []).map(p => {
+        const link = platformLink(review, p);
+        if (!link) return `<span class="tag" style="--tag-color: ${platformColor(p)}">${escapeHtml(p)}</span>`;
+        return `<a class="tag tag-link" style="--tag-color: ${platformColor(p)}" href="${escapeHtml(link.url)}" target="_blank" rel="noopener"
+            onclick="event.stopPropagation()" title="${link.isSearch ? '在平台上搜尋' : '打開作品頁'}">${escapeHtml(p)} ${link.isSearch ? '🔍' : '↗'}</a>`;
+    }).join(' ');
 }
 
 function starsText(rating) {
@@ -130,6 +151,15 @@ function createReviewForm(container, options = {}) {
             <div class="chip-group" data-group="platform">
                 ${PLATFORMS.map(p => `<button type="button" class="chip" data-value="${p}" style="--opt-color: ${platformColor(p)}">${p}</button>`).join('')}
             </div>
+            <div class="link-fields">
+                ${PLATFORMS.map(p => `
+                    <div class="link-field" data-link-row="${p}">
+                        <span class="swatch" style="background: ${platformColor(p)}"></span>
+                        <input class="input" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"
+                            data-link="${p}" placeholder="${p} 作品網址（選填，貼上分享連結）">
+                    </div>`).join('')}
+            </div>
+            <div class="form-hint">沒填網址時，點平台標籤會用韓文標題在該平台搜尋</div>
         </div>
         <div class="form-section">
             <label class="form-label">評分</label>
@@ -173,6 +203,7 @@ function createReviewForm(container, options = {}) {
         container.querySelectorAll('[data-group="day"] .chip').forEach(b => b.classList.toggle('selected', b.dataset.value === state.updateDay));
         container.querySelectorAll('[data-group="platform"] .chip').forEach(b => b.classList.toggle('selected', state.platforms.includes(b.dataset.value)));
         container.querySelectorAll('[data-group="rating"] button').forEach(b => b.classList.toggle('on', parseInt(b.dataset.value) <= state.rating));
+        container.querySelectorAll('[data-link-row]').forEach(row => { row.hidden = !state.platforms.includes(row.dataset.linkRow); });
         $('[data-role="day-section"]').style.display = state.status === DEFAULT_STATUS ? '' : 'none';
         const filled = JOB_KEYS.filter(j => $(`[data-field="${j.key}"]`).value.trim()).length;
         $('[data-role="team-count"]').textContent = filled ? `(已填 ${filled} 項)` : '';
@@ -206,8 +237,14 @@ function createReviewForm(container, options = {}) {
     function getData() {
         const data = {};
         textFields.forEach(el => { data[el.dataset.field] = el.value; });
+        const links = {};
+        container.querySelectorAll('[data-link]').forEach(el => {
+            const p = el.dataset.link;
+            if (state.platforms.includes(p) && el.value.trim()) links[p] = el.value.trim();
+        });
         return {
             ...data,
+            links,
             status: state.status,
             updateDay: state.status === DEFAULT_STATUS ? state.updateDay : '',
             platforms: [...state.platforms],
@@ -217,6 +254,7 @@ function createReviewForm(container, options = {}) {
 
     function setData(data = {}) {
         textFields.forEach(el => { el.value = data[el.dataset.field] || ''; });
+        container.querySelectorAll('[data-link]').forEach(el => { el.value = (data.links || {})[el.dataset.link] || ''; });
         state.status = STATUS_CONFIG[data.status] ? data.status : DEFAULT_STATUS;
         state.updateDay = DAY_MAP[data.updateDay] ? data.updateDay : '';
         state.platforms = [...(data.platforms || [])];
