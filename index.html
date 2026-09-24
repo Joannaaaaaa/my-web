@@ -90,17 +90,14 @@
         .day-heading-sub { font-size: 0.8rem; color: var(--text-muted); }
         .day-list { touch-action: pan-y; min-height: 120px; }
         .day-item {
-            display: flex; align-items: center; gap: 12px; padding: 12px 2px; min-height: 60px;
+            display: block; padding: 12px 2px; min-height: 60px;
             border-bottom: 1px solid var(--border); cursor: pointer;
         }
         .day-item:last-child { border-bottom: none; }
         .day-item:active { background: var(--raised); }
-        .day-item-dots { display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; }
-        .day-item-dots span { width: 8px; height: 8px; border-radius: 50%; }
-        .day-item-main { flex: 1; min-width: 0; }
         .day-item-title { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .day-item-kr { font-size: 0.8rem; color: #8a94a6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .day-item-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; flex-shrink: 0; max-width: 45%; }
+        .day-item-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
         .day-empty { color: var(--text-muted); text-align: center; padding: 36px 0; font-size: 0.9rem; }
         .memo-panel .panel-title { color: var(--text-sub); }
         .memo-textarea { width: 100%; min-height: 120px; background: transparent; border: none; color: var(--text); font-family: inherit; font-size: 16px; line-height: 1.6; resize: none; padding: 0; }
@@ -558,7 +555,7 @@
                         </div>
                         <div class="card-stars">${starsText(r.rating)}</div>
                     </div>
-                    <div class="card-meta">${statusBadgeHtml(r)} ${platformLinkTagsHtml(r)}</div>
+                    <div class="card-meta">${statusBadgeHtml(r)} ${platformLinkTagsHtml(r, { short: true })}</div>
                     ${creators ? `<div class="card-creators">${creators}</div>` : ''}
                     ${relations ? `<div class="card-relations">${relations}</div>` : ''}
                     ${dates ? `<div class="card-dates">${dates}</div>` : ''}
@@ -593,12 +590,9 @@
         document.getElementById('dayHeadingSub').textContent = items.length ? `${items.length} 部更新` : '';
         document.getElementById('dayList').innerHTML = items.length ? items.map(({ r, i }) => `
             <div class="day-item" role="button" tabindex="0" onclick="openDetail(${i})" onkeydown="if (event.key === 'Enter') openDetail(${i})">
-                <div class="day-item-dots">${(r.platforms || []).map(p => `<span style="background: ${platformColor(p)}"></span>`).join('')}</div>
-                <div class="day-item-main">
-                    <div class="day-item-title">${escapeHtml(cleanTitleBrackets(r.title) || '未命名')}</div>
-                    ${r.krTitle ? `<div class="day-item-kr">${escapeHtml(r.krTitle)}</div>` : ''}
-                </div>
-                <div class="day-item-links">${platformLinkTagsHtml(r)}</div>
+                <div class="day-item-title">${escapeHtml(cleanTitleBrackets(r.title) || '未命名')}</div>
+                ${r.krTitle ? `<div class="day-item-kr">${escapeHtml(r.krTitle)}</div>` : ''}
+                <div class="day-item-links">${platformLinkTagsHtml(r, { short: true })}</div>
             </div>`).join('')
             : `<div class="day-empty">${DAY_ZH[selectedDay]}沒有連載中的作品</div>`;
     }

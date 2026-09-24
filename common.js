@@ -76,13 +76,14 @@ function platformLink(review, platform) {
     return { url: config.search(encodeURIComponent(keyword)), isSearch: true };
 }
 
-// 可點的平台標籤：直接連結顯示 ↗，搜尋顯示 🔍
-function platformLinkTagsHtml(review) {
+// 可點的平台標籤：直接連結顯示 ↗，搜尋顯示 🔍；short 用簡稱（Ridi、Bom）節省空間
+function platformLinkTagsHtml(review, { short = false } = {}) {
     return (review.platforms || []).map(p => {
         const link = platformLink(review, p);
-        if (!link) return `<span class="tag" style="--tag-color: ${platformColor(p)}">${escapeHtml(p)}</span>`;
+        const name = escapeHtml(short ? (PLATFORM_CONFIG[p]?.short || p) : p);
+        if (!link) return `<span class="tag" style="--tag-color: ${platformColor(p)}">${name}</span>`;
         return `<a class="tag tag-link" style="--tag-color: ${platformColor(p)}" href="${escapeHtml(link.url)}" target="_blank" rel="noopener"
-            onclick="event.stopPropagation()" title="${link.isSearch ? '在平台上搜尋' : '打開作品頁'}">${escapeHtml(p)} ${link.isSearch ? '🔍' : '↗'}</a>`;
+            onclick="event.stopPropagation()" title="${link.isSearch ? '在平台上搜尋' : '打開作品頁'}">${name} ${link.isSearch ? '🔍' : '↗'}</a>`;
     }).join(' ');
 }
 
