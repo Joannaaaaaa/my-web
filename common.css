@@ -11,10 +11,11 @@
     --text-muted: #7f8794;
     --star: #f1c40f;
     --danger: #e74c3c;
-    --status-ongoing: #2ecc71;
-    --status-completed: #3498db;
-    --status-paused: #95a5a6;
-    --status-dropped: #e67e22;
+    /* 狀態色：同時用於徽章與圖表，已驗證在深色背景上彼此可區分（含色盲） */
+    --status-ongoing: #219a52;
+    --status-completed: #2d7dd2;
+    --status-paused: #8a70c8;
+    --status-dropped: #c8641a;
     --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 

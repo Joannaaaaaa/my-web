@@ -50,7 +50,7 @@ function escapeHtml(str) {
 
 function cleanTitleBrackets(title) {
     if (!title) return '';
-    return title.replace(/[\（\xFF08].*$/g, '').trim();
+    return title.replace(/\s*[（(].*$/, '').trim(); // 去掉「(64)」「（64）」這類括號後綴
 }
 
 function splitNames(value) {
