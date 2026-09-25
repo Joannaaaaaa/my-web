@@ -13,7 +13,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-1">
+    <link rel="stylesheet" href="common.css?v=20260926-2">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -164,6 +164,8 @@
         .return-count b { font-size: 1.3rem; }
         .return-count small { color: var(--text-muted); font-size: 0.75rem; margin-left: 2px; }
         .return-when.due { color: #b9a6ef; font-weight: bold; }
+        .return-item.unknown .day-item-title { color: var(--text-sub); }
+        .return-pill { flex-shrink: 0; font-size: 0.78rem; font-weight: bold; color: #fff; background: var(--status-paused); border-radius: 12px; padding: 4px 10px; }
         .return-note { font-size: 0.8rem; color: var(--text-muted); padding-top: 8px; }
         .day-empty { color: var(--text-muted); text-align: center; padding: 36px 0; font-size: 0.9rem; }
         .memo-panel .panel-title { color: var(--text-sub); }
@@ -577,7 +579,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260926-1"></script>
+<script src="common.js?v=20260926-2"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added' }, Store.loadUi());
@@ -732,9 +734,13 @@
     function statusBadgeHtml(r) {
         const status = r.status || DEFAULT_STATUS;
         let day = status === DEFAULT_STATUS && DAY_MAP[r.updateDay] ? ` · ${DAY_MAP[r.updateDay]}` : '';
-        if (status === '休刊' && r.returnDate) {
-            const n = daysUntil(r.returnDate);
-            day = n > 0 ? ` · ${n} 天後回歸` : ' · 已到回歸日';
+        if (status === '休刊') {
+            const st = returnStatus(r);
+            day = {
+                upcoming: st.exact ? ` · ${st.days} 天後回歸` : ` · ${r.returnText}`,
+                today: ' · 今天回歸', due: ' · 已到回歸日', window: ' · 回歸期間中', overdue: ' · 已超過預計時間',
+                unknown: r.returnText ? ` · ${r.returnText}` : '',
+            }[st.state];
         }
         return `<span class="status-badge ${STATUS_CONFIG[status]?.cls || 'status-ongoing'}">${escapeHtml(status)}${day}</span>`;
     }
@@ -827,58 +833,72 @@
     }
 
     // ---------- 休刊回歸 ----------
-    const WEEKDAY_ZH = ['日', '一', '二', '三', '四', '五', '六'];
-
-    function formatShortDate(dateStr) {
-        const [y, m, d] = dateStr.split('-').map(Number);
-        return `${m}/${d}（${WEEKDAY_ZH[new Date(y, m - 1, d).getDay()]}）`;
-    }
-
     function pausedWorks() {
         return allReviews.map((r, i) => ({ r, i })).filter(({ r }) => r.status === '休刊');
     }
 
+    const RESUME_BUTTON = i => `<button class="btn btn-primary" style="min-height:36px; padding:0 12px; font-size:0.82rem;" onclick="event.stopPropagation(); resumeSerial(${i})">改為連載中</button>`;
+
+    // 依最早可能回歸的時間排序，未定的放最後
     function renderReturns() {
-        const paused = pausedWorks();
-        const dated = paused.filter(({ r }) => r.returnDate)
-            .sort((a, b) => a.r.returnDate.localeCompare(b.r.returnDate));
-        const undated = paused.length - dated.length;
+        const paused = pausedWorks().sort((a, b) =>
+            (a.r.returnFrom || '9999').localeCompare(b.r.returnFrom || '9999'));
         document.getElementById('returnPanel').hidden = paused.length === 0;
-        document.getElementById('returnList').innerHTML = dated.map(({ r, i }) => {
-            const days = daysUntil(r.returnDate);
-            const count = days > 0
-                ? `<div class="return-count"><b>${days}</b><small>天後</small></div>`
-                : `<button class="btn btn-primary" style="min-height:36px; padding:0 12px; font-size:0.82rem;" onclick="event.stopPropagation(); resumeSerial(${i})">改為連載中</button>`;
-            const when = days > 0 ? formatShortDate(r.returnDate)
-                : days === 0 ? `今天回歸 🎉` : `${formatShortDate(r.returnDate)} 已到回歸日`;
+        document.getElementById('returnList').innerHTML = paused.map(({ r, i }) => {
+            const st = returnStatus(r);
+            const range = returnRangeLabel(r.returnFrom, r.returnTo);
+            const text = escapeHtml(r.returnText || '');
+            const when = {
+                unknown: text || '回歸時間未定',
+                upcoming: st.exact ? range : `${text}（${range}）`,
+                today: '今天回歸 🎉',
+                due: `${range} 已到回歸日`,
+                window: `預計回歸期間中・${text}（${range}）`,
+                overdue: `已超過預計時間・${text}（${range}）`,
+            }[st.state];
+            const side = {
+                unknown: '',
+                upcoming: `<div class="return-count"><b>${st.days}</b><small>${st.exact ? '天後' : '天後起'}</small></div>`,
+                window: '<span class="return-pill">期間中</span>',
+            }[st.state] ?? RESUME_BUTTON(i);
             return `
-                <div class="return-item" role="button" tabindex="0" onclick="openDetail(${i})">
+                <div class="return-item ${st.state === 'unknown' ? 'unknown' : ''}" role="button" tabindex="0" onclick="openDetail(${i})">
                     <div class="return-main">
                         <div class="day-item-title">${escapeHtml(r.title || '未命名')}</div>
-                        <div class="return-when ${days <= 0 ? 'due' : ''}">${when}</div>
+                        <div class="return-when ${['today', 'due', 'window', 'overdue'].includes(st.state) ? 'due' : ''}">${when}</div>
                     </div>
-                    ${count}
+                    ${side}
                 </div>`;
-        }).join('') + (undated ? `<div class="return-note">另有 ${undated} 部休刊作品還沒填回歸日</div>` : '');
+        }).join('');
         renderReturnBanner();
     }
 
-    // 到了回歸日就在首頁上方提醒；按 ✕ 當天不再顯示
+    // 首頁上方提醒：確定日期到了（按 ✕ 當天不再顯示）；區間只在剛進入時提醒一次（按 ✕ 後就不再提醒）
+    function returnKey(r) { return `${r.title}|${r.returnFrom}`; }
+
     function renderReturnBanner() {
-        const due = pausedWorks().filter(({ r }) => r.returnDate && daysUntil(r.returnDate) <= 0);
+        const today = toDateStr(new Date());
+        const acked = ui.returnAck || [];
+        const due = pausedWorks().filter(({ r }) => {
+            const st = returnStatus(r).state;
+            if (st === 'today' || st === 'due') return ui.returnDismissed !== today;
+            if (st === 'window') return !acked.includes(returnKey(r));
+            return false;
+        });
         const banner = document.getElementById('returnBanner');
-        if (!due.length || ui.returnDismissed === toDateStr(new Date())) {
+        if (!due.length) {
             banner.hidden = true;
             return;
         }
+        const one = due[0].r, st = returnStatus(one).state;
         const text = due.length === 1
-            ? `🎉《${escapeHtml(cleanTitleBrackets(due[0].r.title))}》${daysUntil(due[0].r.returnDate) === 0 ? '今天回歸' : '已到回歸日'}`
-            : `🎉 有 ${due.length} 部休刊作品到了回歸日`;
+            ? `🎉《${escapeHtml(cleanTitleBrackets(one.title))}》${{ today: '今天回歸', due: '已到回歸日', window: `進入預計回歸期間（${escapeHtml(one.returnText)}）` }[st]}`
+            : `🎉 有 ${due.length} 部休刊作品到了回歸時間`;
         banner.innerHTML = `
             <div class="return-banner-inner">
                 <span>${text}</span>
                 <button class="btn btn-primary" onclick="showReturns()">查看</button>
-                <button class="icon-btn" style="width:36px;height:36px;font-size:1rem;" onclick="dismissReturnBanner()" aria-label="今天不再提醒">✕</button>
+                <button class="icon-btn" style="width:36px;height:36px;font-size:1rem;" onclick="dismissReturnBanner()" aria-label="不再提醒">✕</button>
             </div>`;
         banner.hidden = false;
     }
@@ -890,6 +910,8 @@
 
     function dismissReturnBanner() {
         ui.returnDismissed = toDateStr(new Date());
+        const windowKeys = pausedWorks().filter(({ r }) => returnStatus(r).state === 'window').map(({ r }) => returnKey(r));
+        ui.returnAck = [...new Set([...(ui.returnAck || []), ...windowKeys])];
         Store.saveUi(ui);
         renderReturnBanner();
     }
@@ -898,7 +920,7 @@
     function resumeSerial(i) {
         const r = allReviews[i];
         r.status = DEFAULT_STATUS;
-        r.returnDate = '';
+        Object.assign(r, { returnText: '', returnFrom: '', returnTo: '' });
         Store.saveReviews(allReviews);
         renderAll();
         openDetail(i);
@@ -1361,9 +1383,8 @@
 
     // 找出標題有括號、或心得裡有日期段落的作品，算出整理後的樣子（還不寫入）
     function buildCleanupPlan() {
-        const year = new Date().getFullYear();
         return allReviews.map((r, index) => {
-            const t = parseTitleExtras(r, year);
+            const t = parseTitleExtras(r);
             const c = parseCommentNotes(r);
             if (!t && !c) return null;
             const flags = [...(t?.flags || []), ...(c?.flags || [])];
@@ -1375,7 +1396,7 @@
                     else next.episode = t.episode;
                 }
                 if (t.note) next.note = [r.note, t.note].filter(Boolean).join('・');
-                if (t.returnDate && !r.returnDate) next.returnDate = t.returnDate;
+                if (t.returnFrom && !r.returnFrom) Object.assign(next, { returnText: t.returnText, returnFrom: t.returnFrom, returnTo: t.returnTo });
             }
             if (c) {
                 next.comment = c.comment;
@@ -1403,7 +1424,7 @@
                     if (n.title !== undefined && n.title !== r.title) rows.push(`<div><span class="k">標題</span><span class="old">${escapeHtml(r.title)}</span> → ${escapeHtml(n.title)}</div>`);
                     if (n.episode) rows.push(`<div><span class="k">話數</span>${escapeHtml(episodeLabel(n.episode))}</div>`);
                     if (n.note) rows.push(`<div><span class="k">備註</span>${escapeHtml(n.note)}</div>`);
-                    if (n.returnDate) rows.push(`<div><span class="k">回歸日</span>${escapeHtml(n.returnDate)}</div>`);
+                    if (n.returnFrom) rows.push(`<div><span class="k">回歸時間</span>${escapeHtml(n.returnText)}（${returnRangeLabel(n.returnFrom, n.returnTo)}）</div>`);
                     if (p.addedNotes.length) {
                         rows.push(`<div><span class="k">總評</span>${n.comment ? escapeHtml(n.comment.slice(0, 30)) + (n.comment.length > 30 ? '…' : '') : '（沒有）'}</div>`);
                         rows.push(`<div><span class="k">筆記 ${p.addedNotes.length} 則</span><ul class="cleanup-notes">${p.addedNotes.map(x =>

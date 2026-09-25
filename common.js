@@ -159,6 +159,97 @@ function stepEpisode(value, step) {
     return ep;
 }
 
+// ---------- 回歸時間 ----------
+// 使用者輸入的文字（returnText）→ 換算成日期區間（returnFrom ～ returnTo，確定日期時兩者相同）
+// 規則依序比對，第一條符合的生效；都不符合 = 未定（回傳 null）
+
+const pad2 = n => String(n).padStart(2, '0');
+const lastDayOf = (y, m) => new Date(y, m, 0).getDate();
+
+// 「上次編輯」的時間，用來推算舊資料沒寫年份的日期
+function refDateOf(review) {
+    if (review.updatedAtTs) return new Date(review.updatedAtTs);
+    const m = String(review.updatedAt || '').match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+    return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date();
+}
+
+function parseReturnText(text, ref = new Date()) {
+    const t = String(text || '').replace(/\s+/g, '')
+        .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+    if (!t) return null;
+
+    let year = ref.getFullYear(), explicitYear = false, body = t;
+    const y = t.match(/(20\d{2})年?/);
+    if (y) { year = Number(y[1]); explicitYear = true; body = t.replace(y[0], ''); }
+    else if (t.includes('明年')) { year += 1; explicitYear = true; }
+    else if (t.includes('今年')) { explicitYear = true; }
+
+    // range = [起始月, 起始日, 結束月, 結束日]；結束月比起始月小代表跨年（冬天 12～2 月）
+    let range = null, m;
+    const validMonth = n => n >= 1 && n <= 12;
+    if ((m = body.match(/(\d{1,2})[\/月](\d{1,2})日?/)) && validMonth(+m[1]) && +m[2] >= 1 && +m[2] <= 31) {
+        range = [+m[1], +m[2], +m[1], +m[2]];                                   // 10/14、10月14日
+    } else if ((m = body.match(/(\d{1,2})月(初|上旬|中旬|中後|中|下旬|底|末)/)) && validMonth(+m[1])) {
+        const mo = +m[1], end = lastDayOf(year, mo);
+        range = { 初: [mo, 1, mo, 10], 上旬: [mo, 1, mo, 10], 中旬: [mo, 11, mo, 20], 中: [mo, 11, mo, 20],
+            中後: [mo, 15, mo, end], 下旬: [mo, 21, mo, end], 底: [mo, 21, mo, end], 末: [mo, 21, mo, end] }[m[2]];
+    } else if ((m = body.match(/(\d{1,2})月?[,，、\-~～到至](\d{1,2})月/)) && validMonth(+m[1]) && validMonth(+m[2])) {
+        range = [+m[1], 1, +m[2], 0];                                            // 6, 7月、6-7月
+    } else if ((m = body.match(/(\d{1,2})月/)) && validMonth(+m[1])) {
+        range = [+m[1], 1, +m[1], 0];                                            // 6月
+    } else if (body.includes('上半年')) {
+        range = [1, 1, 6, 0];
+    } else if (body.includes('下半年')) {
+        range = [7, 1, 12, 0];
+    } else if ((m = body.match(/[春夏秋冬]/))) {
+        range = { 春: [3, 1, 5, 0], 夏: [6, 1, 8, 0], 秋: [9, 1, 11, 0], 冬: [12, 1, 2, 0] }[m[0]];
+    } else if (body.includes('年初')) {
+        range = [1, 1, 2, 0];
+    } else if (body.includes('年中')) {
+        range = [6, 1, 7, 0];
+    } else if (/年[底末]/.test(body)) {
+        range = [11, 1, 12, 0];
+    }
+    if (!range) return null;
+
+    const build = yr => {
+        const [fm, fd, tm, td] = range;
+        const toYear = tm < fm ? yr + 1 : yr;
+        return {
+            from: `${yr}-${pad2(fm)}-${pad2(fd)}`,
+            to: `${toYear}-${pad2(tm)}-${pad2(td || lastDayOf(toYear, tm))}`,
+        };
+    };
+    let result = build(year);
+    // 沒寫年份、而且整段在參考日之前已經過完 → 算明年（9 月輸入「春天」= 明年春天）
+    const refKey = `${ref.getFullYear()}-${pad2(ref.getMonth() + 1)}-${pad2(ref.getDate())}`;
+    if (!explicitYear && result.to < refKey) result = build(year + 1);
+    return result;
+}
+
+// 回歸狀態：unknown / upcoming（還沒到）/ today / due（確定日期已過）/ window（區間中）/ overdue（區間已過）
+function returnStatus(review) {
+    if (!review.returnFrom) return { state: 'unknown' };
+    const exact = review.returnFrom === review.returnTo;
+    const d1 = daysUntil(review.returnFrom), d2 = daysUntil(review.returnTo);
+    if (d1 > 0) return { state: 'upcoming', days: d1, exact };
+    if (exact) return { state: d1 === 0 ? 'today' : 'due', exact };
+    return { state: d2 >= 0 ? 'window' : 'overdue', exact };
+}
+
+const WEEKDAY_ZH = ['日', '一', '二', '三', '四', '五', '六'];
+
+// 2026-10-14 → 10/14（三）；區間 → 7/1～12/31；不是今年的會加年份
+function returnRangeLabel(from, to) {
+    const fmt = (str, withWeekday) => {
+        const [y, m, d] = str.split('-').map(Number);
+        const yearPart = y !== new Date().getFullYear() ? `${y}/` : '';
+        return `${yearPart}${m}/${d}${withWeekday ? `（${WEEKDAY_ZH[new Date(y, m - 1, d).getDay()]}）` : ''}`;
+    };
+    if (!from) return '';
+    return from === to ? fmt(from, true) : `${fmt(from)}～${fmt(to)}`;
+}
+
 function episodeText(review) {
     const label = episodeLabel(review.episode);
     return label ? `看到 ${label}` : '';
@@ -187,12 +278,13 @@ function noteDateLabel(note) {
 // ---------- 整理舊資料：標題括號、心得裡的日期 ----------
 
 // 標題：「以為只是普通穿越（100+15+後記）」「TOY DADDY（40+後記）10/14」「無法逃離的黑暗（105）找不到外傳」
-// 回傳 { title, episode, note, returnDate, flags } 或 null（沒有括號）
-function parseTitleExtras(review, year = new Date().getFullYear()) {
+// 回傳 { title, episode, note, returnText, returnFrom, returnTo, flags } 或 null（沒有括號）
+// ref：推算年份用的日期，預設為作品最後編輯的時間
+function parseTitleExtras(review, ref = refDateOf(review)) {
     const m = (review.title || '').match(/^(.*?)\s*[（(]([^（()）]*)[)）](.*)$/);
     if (!m || !m[1].trim()) return null;
     const inner = m[2].trim(), trailing = m[3].trim();
-    const result = { title: m[1].trim(), episode: null, note: '', returnDate: '', flags: [] };
+    const result = { title: m[1].trim(), episode: null, note: '', returnText: '', returnFrom: '', returnTo: '', flags: [] };
     const notes = [];
 
     // 話數：70、70+2、100+15+後記；「後記還沒看」「後記還沒有翻譯」代表還沒讀，不算
@@ -215,14 +307,17 @@ function parseTitleExtras(review, year = new Date().getFullYear()) {
     }
     if (trailing) notes.push(trailing);
 
-    // 休刊作品的「7/19回歸」「10/14」→ 回歸日
+    // 休刊作品的「7/19回歸」「10/14」「下半年回歸」「6月中後繼續」→ 回歸時間；「季1休」這種沒有時間的留在備註
     if (review.status === '休刊') {
         for (let k = notes.length - 1; k >= 0; k--) {
-            const d = notes[k].match(/^(\d{1,2})\/(\d{1,2})\s*(?:回歸)?$/);
-            if (d && Number(d[1]) >= 1 && Number(d[1]) <= 12 && Number(d[2]) >= 1 && Number(d[2]) <= 31) {
-                result.returnDate = `${year}-${String(d[1]).padStart(2, '0')}-${String(d[2]).padStart(2, '0')}`;
-                notes.splice(k, 1);
-            }
+            const piece = notes[k];
+            const looksLikeReturn = /回歸|繼續|回來|復更/.test(piece) || /^\d{1,2}\/\d{1,2}$/.test(piece);
+            const range = looksLikeReturn ? parseReturnText(piece, ref) : null;
+            if (!range) continue;
+            result.returnText = piece.replace(/(回歸|繼續|回來|復更)$/, '').trim() || piece;
+            result.returnFrom = range.from;
+            result.returnTo = range.to;
+            notes.splice(k, 1);
         }
     }
     result.note = notes.join('・');
@@ -337,9 +432,19 @@ function readJson(key, fallback) {
 // 舊資料遷移：
 // 1. 話數寫在標題括號裡，例如「上流社會 (64)」「上流社會 (70+2+1)」→ 搬到 episode 欄位
 // 2. episode 是舊格式（數字 64、字串 "70+2+1"）→ 轉成 { main, side, after }
+// 3. 舊版 returnDate → returnText / returnFrom / returnTo
 function migrateReviews(list) {
     let changed = false;
     list.forEach(r => {
+        // 舊版只有確定日期 returnDate → 回歸時間
+        if (r.returnDate) {
+            if (!r.returnFrom) {
+                const [, mo, d] = r.returnDate.split('-').map(Number);
+                Object.assign(r, { returnText: `${mo}/${d}`, returnFrom: r.returnDate, returnTo: r.returnDate });
+            }
+            delete r.returnDate;
+            changed = true;
+        }
         if (r.episode !== undefined && r.episode !== '' && typeof r.episode !== 'object') {
             r.episode = normalizeEpisode(r.episode) || '';
             changed = true;
@@ -464,6 +569,15 @@ function coverHtml(review, url, size = 'md') {
 function createReviewForm(container, options = {}) {
     const state = { status: DEFAULT_STATUS, updateDay: '', platforms: [], rating: 0, coverId: '' };
     let cleanSnapshot = '';
+    // 回歸時間換算後就固定下來；文字沒改就沿用原本的區間，避免過一陣子再存時「春天」被改算成明年
+    let returnOrig = { text: '', from: '', to: '' };
+
+    function currentReturn() {
+        const text = $('[data-field="returnText"]').value.trim();
+        if (text === returnOrig.text) return { text, from: returnOrig.from, to: returnOrig.to };
+        const range = parseReturnText(text);
+        return { text, from: range?.from || '', to: range?.to || '' };
+    }
 
     container.innerHTML = `
         <div class="form-section cover-edit">
@@ -484,7 +598,7 @@ function createReviewForm(container, options = {}) {
         </div>
         <div class="form-section">
             <label class="form-label">備註</label>
-            <input class="input" data-field="note" placeholder="例如：等翻譯、找不到外傳、下半年回歸">
+            <input class="input" data-field="note" placeholder="例如：等翻譯、找不到外傳、季1休">
         </div>
         <div class="form-section">
             <label class="form-label">閱讀狀態</label>
@@ -499,9 +613,9 @@ function createReviewForm(container, options = {}) {
             </div>
         </div>
         <div class="form-section" data-role="return-section">
-            <label class="form-label">預計回歸日</label>
-            <input class="input" type="date" data-field="returnDate" style="max-width: 220px;">
-            <div class="form-hint">到了這天，本週頁和首頁上方會提醒你</div>
+            <label class="form-label">回歸時間</label>
+            <input class="input" data-field="returnText" placeholder="例如：10/14、6月中後、6, 7月、下半年、不定">
+            <div class="form-hint" data-role="return-hint"></div>
         </div>
         <div class="form-section">
             <label class="form-label">看到第幾話</label>
@@ -574,6 +688,9 @@ function createReviewForm(container, options = {}) {
         container.querySelectorAll('[data-link-row]').forEach(row => { row.hidden = !state.platforms.includes(row.dataset.linkRow); });
         $('[data-role="day-section"]').style.display = state.status === DEFAULT_STATUS ? '' : 'none';
         $('[data-role="return-section"]').style.display = state.status === '休刊' ? '' : 'none';
+        const ret = currentReturn();
+        $('[data-role="return-hint"]').textContent = !ret.text ? '輸入後會換算成日期；到了會在本週頁和首頁提醒你'
+            : ret.from ? `→ ${returnRangeLabel(ret.from, ret.to)}` : '→ 未定（不會提醒）';
         const filled = JOB_KEYS.filter(j => $(`[data-field="${j.key}"]`).value.trim()).length;
         $('[data-role="team-count"]').textContent = filled ? `(已填 ${filled} 項)` : '';
     }
@@ -662,7 +779,10 @@ function createReviewForm(container, options = {}) {
             links,
             status: state.status,
             updateDay: state.status === DEFAULT_STATUS ? state.updateDay : '',
-            returnDate: state.status === '休刊' ? data.returnDate : '',
+            ...(() => {
+                const ret = state.status === '休刊' ? currentReturn() : { text: '', from: '', to: '' };
+                return { returnText: ret.text, returnFrom: ret.from, returnTo: ret.to };
+            })(),
             platforms: [...state.platforms],
             rating: state.rating,
             coverId: state.coverId,
@@ -670,6 +790,7 @@ function createReviewForm(container, options = {}) {
     }
 
     function setData(data = {}) {
+        returnOrig = { text: (data.returnText || '').trim(), from: data.returnFrom || '', to: data.returnTo || '' };
         textFields.forEach(el => { el.value = data[el.dataset.field] ?? ''; });
         container.querySelectorAll('[data-link]').forEach(el => { el.value = (data.links || {})[el.dataset.link] || ''; });
         const ep = normalizeEpisode(data.episode) || {};
