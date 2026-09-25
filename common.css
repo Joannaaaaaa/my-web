@@ -1,24 +1,124 @@
 /* 共用樣式：色彩、按鈕、標籤、表單元件（手機優先） */
 :root {
+    color-scheme: dark;
     --primary: #3498db;
     --bg: #0f1218;
     --surface: #15181f;
     --card-bg: #1a1d24;
     --raised: #242831;
     --border: #2d3139;
+    --border-strong: #4a5160;
+    --input-border: #333;
     --text: #ecf0f1;
+    --text-strong: #fff;
     --text-sub: #bdc3c7;
     --text-muted: #7f8794;
+    --text-kr: #8a94a6;
+    --text-faint: #555;
     --star: #f1c40f;
     --star-empty: #3a3f4a;
     --danger: #e74c3c;
-    /* 狀態色：同時用於徽章與圖表，已驗證在深色背景上彼此可區分（含色盲） */
+    --chip-border: #444;
+    --chip-text: #999;
+    --tag-bg: rgba(0, 0, 0, 0.4);
+    --link: #58b6ec;
+    --link-soft-bg: rgba(88, 182, 236, 0.12);
+    --link-soft-text: #9fd4f5;
+    --ep-bg: rgba(52, 152, 219, 0.18);
+    --ep-text: #7cc4f2;
+    --backlog-bg: rgba(200, 100, 26, 0.2);
+    --backlog-text: #f0a35e;
+    --note-text: #c9b27a;
+    --flag-text: #e6b450;
+    --due-text: #b9a6ef;
+    --bar-bg: rgba(21, 24, 31, 0.97);
+    --toolbar-bg: rgba(15, 18, 24, 0.94);
+    /* 狀態色：同時用於徽章與圖表，已驗證在深色與淺色背景上彼此可區分（含色盲） */
     --status-ongoing: #219a52;
     --status-completed: #2d7dd2;
     --status-paused: #8a70c8;
     --status-dropped: #c8641a;
     --status-wishlist: #c2548f;
     --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* 淺色模式：選單可選「跟隨手機／深色／淺色」，選擇存在 <html data-theme> */
+:root[data-theme="light"] {
+    color-scheme: light;
+    --primary: #2a7fc4;
+    --bg: #f3f4f7;
+    --surface: #ffffff;
+    --card-bg: #ffffff;
+    --raised: #eceef2;
+    --border: #e1e4ea;
+    --border-strong: #b8bec8;
+    --input-border: #cfd4dc;
+    --text: #1b1f27;
+    --text-strong: #11141a;
+    --text-sub: #4a5160;
+    --text-muted: #737b89;
+    --text-kr: #667085;
+    --text-faint: #9aa1ad;
+    --star: #e5b000;
+    --star-empty: #d5d9e0;
+    --danger: #c9302c;
+    --chip-border: #cfd4dc;
+    --chip-text: #5c6472;
+    --tag-bg: rgba(0, 0, 0, 0.03);
+    --link: #1f72b8;
+    --link-soft-bg: rgba(31, 114, 184, 0.1);
+    --link-soft-text: #1f5f96;
+    --ep-bg: rgba(42, 127, 196, 0.12);
+    --ep-text: #1f6fae;
+    --backlog-bg: rgba(200, 100, 26, 0.13);
+    --backlog-text: #a8520f;
+    --note-text: #8a6d1f;
+    --flag-text: #a36d00;
+    --due-text: #6a4fb0;
+    --bar-bg: rgba(255, 255, 255, 0.97);
+    --toolbar-bg: rgba(243, 244, 247, 0.94);
+}
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+        color-scheme: light;
+        --primary: #2a7fc4;
+        --bg: #f3f4f7;
+        --surface: #ffffff;
+        --card-bg: #ffffff;
+        --raised: #eceef2;
+        --border: #e1e4ea;
+        --border-strong: #b8bec8;
+        --input-border: #cfd4dc;
+        --text: #1b1f27;
+        --text-strong: #11141a;
+        --text-sub: #4a5160;
+        --text-muted: #737b89;
+        --text-kr: #667085;
+        --text-faint: #9aa1ad;
+        --star: #e5b000;
+        --star-empty: #d5d9e0;
+        --danger: #c9302c;
+        --chip-border: #cfd4dc;
+        --chip-text: #5c6472;
+        --tag-bg: rgba(0, 0, 0, 0.03);
+        --link: #1f72b8;
+        --link-soft-bg: rgba(31, 114, 184, 0.1);
+        --link-soft-text: #1f5f96;
+        --ep-bg: rgba(42, 127, 196, 0.12);
+        --ep-text: #1f6fae;
+        --backlog-bg: rgba(200, 100, 26, 0.13);
+        --backlog-text: #a8520f;
+        --note-text: #8a6d1f;
+        --flag-text: #a36d00;
+        --due-text: #6a4fb0;
+        --bar-bg: rgba(255, 255, 255, 0.97);
+        --toolbar-bg: rgba(243, 244, 247, 0.94);
+    }
+}
+/* 淺色背景上，黃色等淺的平台色直接當文字看不清楚，改用加深的版本 */
+:root[data-theme="light"] .tag, :root[data-theme="light"] .chip.selected { --tag-text: color-mix(in srgb, var(--tag-color, var(--opt-color)) 58%, black); --opt-text: color-mix(in srgb, var(--opt-color) 58%, black); }
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) .tag, :root:not([data-theme="dark"]) .chip.selected { --tag-text: color-mix(in srgb, var(--tag-color, var(--opt-color)) 58%, black); --opt-text: color-mix(in srgb, var(--opt-color) 58%, black); }
 }
 
 * { box-sizing: border-box; }
@@ -36,13 +136,13 @@ button { font-family: inherit; }
 .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 6px;
     min-height: 44px; padding: 0 16px; border: none; border-radius: 10px;
-    font-size: 0.95rem; font-weight: bold; cursor: pointer; color: #fff; background: var(--raised);
+    font-size: 0.95rem; font-weight: bold; cursor: pointer; color: var(--text); background: var(--raised);
     text-decoration: none;
 }
 .btn:active { opacity: 0.8; }
 .btn:disabled { opacity: 0.45; cursor: default; }
-.btn-primary { background: var(--primary); }
-.btn-danger { background: #c0392b; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-danger { background: #c0392b; color: #fff; }
 .btn-ghost { background: transparent; color: var(--text-sub); }
 .icon-btn {
     width: 44px; height: 44px; border: none; border-radius: 50%;
@@ -60,7 +160,7 @@ button { font-family: inherit; }
 .status-wishlist { background: var(--status-wishlist); }
 .tag {
     display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: bold;
-    background: rgba(0, 0, 0, 0.4); border: 1px solid var(--tag-color, #ccc); color: var(--tag-color, #ccc);
+    background: var(--tag-bg); border: 1px solid var(--tag-color, #ccc); color: var(--tag-text, var(--tag-color, #ccc));
 }
 
 /* 表單 */
@@ -69,8 +169,8 @@ button { font-family: inherit; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .input {
     width: 100%; min-height: 44px; padding: 10px 12px;
-    background: var(--bg); border: 1px solid #333; border-radius: 10px;
-    color: #fff; font-family: inherit;
+    background: var(--bg); border: 1px solid var(--input-border); border-radius: 10px;
+    color: var(--text); font-family: inherit;
     font-size: 16px; /* 16px 以上 iOS 才不會自動放大 */
 }
 .input:focus { outline: none; border-color: var(--primary); }
@@ -79,11 +179,11 @@ input[type="date"].input { -webkit-appearance: none; appearance: none; }
 
 .chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {
-    min-height: 40px; padding: 0 14px; border-radius: 20px; border: 2px solid #444;
-    background: var(--raised); color: #999; font-size: 0.9rem; font-weight: bold; cursor: pointer;
+    min-height: 40px; padding: 0 14px; border-radius: 20px; border: 2px solid var(--chip-border);
+    background: var(--raised); color: var(--chip-text); font-size: 0.9rem; font-weight: bold; cursor: pointer;
 }
 .chip.selected {
-    border-color: var(--opt-color, var(--primary)); color: var(--opt-color, #fff);
+    border-color: var(--opt-color, var(--primary)); color: var(--opt-text, var(--opt-color, var(--text-strong)));
     background: transparent; box-shadow: 0 0 8px var(--opt-color, var(--primary));
 }
 .chip-day { min-width: 44px; padding: 0; }
@@ -94,7 +194,7 @@ input[type="date"].input { -webkit-appearance: none; appearance: none; }
 .link-field .input { min-height: 40px; padding: 8px 12px; }
 .link-fields:not(:has(.link-field:not([hidden]))) { display: none; }
 a.tag-link { text-decoration: none; padding: 4px 8px; }
-a.tag-link:active { background: rgba(255, 255, 255, 0.08); }
+a.tag-link:active { background: var(--raised); }
 
 .episode-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 360px; }
 .episode-grid .episode-label { font-size: 0.78rem; margin-bottom: 4px; font-weight: normal; }

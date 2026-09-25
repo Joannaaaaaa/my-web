@@ -614,6 +614,28 @@ function coverHtml(review, url, size = 'md') {
     return `<div class="cover cover-${size} cover-placeholder" aria-hidden="true">${escapeHtml(first)}</div>`;
 }
 
+// ---------- 外觀（深色／淺色） ----------
+// ui.theme：'auto'（跟隨手機）｜'dark'｜'light'
+const THEME_LABELS = { auto: '跟隨手機', dark: '深色', light: '淺色' };
+
+function currentTheme() {
+    return Store.loadUi().theme || 'auto';
+}
+
+function applyTheme(theme = currentTheme()) {
+    if (document.documentElement.hasAttribute('data-theme-lock')) return; // 固定外觀的頁面
+    if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+    else delete document.documentElement.dataset.theme;
+    // 手機瀏覽器上方的顏色跟著背景
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#0f1218';
+}
+
+if (typeof window !== 'undefined' && window.matchMedia) {
+    applyTheme();
+    window.matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => applyTheme());
+}
+
 // ---------- 漫畫表單元件 ----------
 
 /**

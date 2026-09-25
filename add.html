@@ -6,6 +6,11 @@
     <meta name="theme-color" content="#0f1218">
     <title>新增漫畫</title>
     <script>
+        // 外觀：在畫面出現前先套用使用者選的深色／淺色，避免閃一下
+        try {
+            const theme = JSON.parse(localStorage.getItem('my_review_ui') || '{}').theme;
+            if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+        } catch (e) {}
         // 程式出錯時在畫面上顯示訊息，而不是整頁空白（放在最前面，common.js 載入失敗也能顯示）
         window.addEventListener('error', e => {
             const box = document.getElementById('fatalError') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'fatalError' }));
@@ -13,13 +18,13 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-4">
+    <link rel="stylesheet" href="common.css?v=20260926-5">
     <style>
         .topbar {
             position: sticky; top: 0; z-index: 10;
             display: flex; align-items: center; gap: 4px;
             padding: 6px 8px; padding-top: calc(6px + env(safe-area-inset-top, 0px));
-            background: rgba(15, 18, 24, 0.92); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            background: var(--toolbar-bg); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
             border-bottom: 1px solid var(--border);
         }
         .topbar h1 { font-size: 1.1rem; margin: 0; flex: 1; }
@@ -30,7 +35,7 @@
             position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
             display: flex; gap: 10px; justify-content: center;
             padding: 10px 16px calc(10px + var(--safe-bottom));
-            background: rgba(21, 24, 31, 0.96); border-top: 1px solid var(--border);
+            background: var(--bar-bg); border-top: 1px solid var(--border);
         }
         .action-bar .btn { flex: 1; max-width: 340px; min-height: 48px; }
         .action-bar .btn-ghost { flex: 0 0 auto; }
@@ -53,7 +58,7 @@
     <button class="btn btn-primary" onclick="saveToGallery()">儲存</button>
 </div>
 
-<script src="common.js?v=20260926-4"></script>
+<script src="common.js?v=20260926-5"></script>
 <script>
     const form = createReviewForm(document.getElementById('reviewForm'), {
         teamOpen: true,
