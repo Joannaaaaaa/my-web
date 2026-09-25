@@ -87,6 +87,28 @@ function platformLinkTagsHtml(review) {
     }).join(' ');
 }
 
+// ---------- 日期 ----------
+
+function toDateStr(d) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// 本週（週一開始）某一天的日期字串，例如 weekDateOf('Fri') → '2026-09-25'
+function weekDateOf(day, now = new Date()) {
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (now.getDay() + 6) % 7);
+    return toDateStr(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + DAYS.indexOf(day)));
+}
+
+// 已讀記錄存的是「這週那一天」的日期，到下週自然就不相等，等於自動重置
+function isReadThisWeek(review) {
+    return !!review.updateDay && review.lastReadDate === weekDateOf(review.updateDay);
+}
+
+function episodeText(review) {
+    return Number.isInteger(review.episode) ? `第 ${review.episode} 話` : '';
+}
+
 function starsText(rating) {
     const r = Math.max(0, Math.min(5, parseInt(rating) || 0));
     return '★'.repeat(r) + '☆'.repeat(5 - r);
@@ -104,8 +126,26 @@ function readJson(key, fallback) {
     }
 }
 
+// 舊資料把「看到第幾話」寫在標題括號裡，例如「上流社會 (64)」；搬到 episode 欄位
+function migrateReviews(list) {
+    let changed = false;
+    list.forEach(r => {
+        if (r.episode !== undefined) return;
+        const m = (r.title || '').match(/^(.*?)\s*[（(]\s*(\d+)\s*[)）]\s*$/);
+        if (!m || !m[1].trim()) return;
+        r.title = m[1].trim();
+        r.episode = parseInt(m[2]);
+        changed = true;
+    });
+    return changed;
+}
+
 const Store = {
-    loadReviews() { return readJson(STORAGE_KEYS.reviews, []); },
+    loadReviews() {
+        const list = readJson(STORAGE_KEYS.reviews, []);
+        if (migrateReviews(list)) this.saveReviews(list);
+        return list;
+    },
     saveReviews(list) { localStorage.setItem(STORAGE_KEYS.reviews, JSON.stringify(list)); },
     loadMemo() { return localStorage.getItem(STORAGE_KEYS.memo) || ''; },
     saveMemo(text) { localStorage.setItem(STORAGE_KEYS.memo, text); },
@@ -129,7 +169,7 @@ function createReviewForm(container, options = {}) {
     container.innerHTML = `
         <div class="form-section">
             <label class="form-label">漫畫名稱</label>
-            <input class="input" data-field="title" placeholder="例如：上流社會 (64)">
+            <input class="input" data-field="title" placeholder="例如：上流社會">
         </div>
         <div class="form-section">
             <label class="form-label">한국어 제목</label>
@@ -145,6 +185,14 @@ function createReviewForm(container, options = {}) {
             <label class="form-label">連載更新日</label>
             <div class="chip-group" data-group="day">
                 ${DAYS.map(d => `<button type="button" class="chip chip-day" data-value="${d}">${DAY_MAP[d]}</button>`).join('')}
+            </div>
+        </div>
+        <div class="form-section">
+            <label class="form-label">看到第幾話</label>
+            <div class="stepper">
+                <button type="button" data-step="-1" aria-label="減一話">−</button>
+                <input class="input" type="number" inputmode="numeric" min="0" data-field="episode" placeholder="—">
+                <button type="button" data-step="1" aria-label="加一話">＋</button>
             </div>
         </div>
         <div class="form-section">
@@ -216,6 +264,13 @@ function createReviewForm(container, options = {}) {
     }
 
     container.addEventListener('click', e => {
+        const stepBtn = e.target.closest('button[data-step]');
+        if (stepBtn) {
+            const input = $('[data-field="episode"]');
+            input.value = Math.max(0, (parseInt(input.value) || 0) + parseInt(stepBtn.dataset.step));
+            changed();
+            return;
+        }
         const btn = e.target.closest('button[data-value]');
         if (!btn) return;
         const group = btn.parentElement.dataset.group;
@@ -243,8 +298,10 @@ function createReviewForm(container, options = {}) {
             const p = el.dataset.link;
             if (state.platforms.includes(p) && el.value.trim()) links[p] = el.value.trim();
         });
+        const episode = parseInt(data.episode);
         return {
             ...data,
+            episode: Number.isInteger(episode) && episode >= 0 ? episode : '',
             links,
             status: state.status,
             updateDay: state.status === DEFAULT_STATUS ? state.updateDay : '',
@@ -254,7 +311,7 @@ function createReviewForm(container, options = {}) {
     }
 
     function setData(data = {}) {
-        textFields.forEach(el => { el.value = data[el.dataset.field] || ''; });
+        textFields.forEach(el => { el.value = data[el.dataset.field] ?? ''; });
         container.querySelectorAll('[data-link]').forEach(el => { el.value = (data.links || {})[el.dataset.link] || ''; });
         state.status = STATUS_CONFIG[data.status] ? data.status : DEFAULT_STATUS;
         state.updateDay = DAY_MAP[data.updateDay] ? data.updateDay : '';

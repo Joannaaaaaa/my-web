@@ -94,6 +94,13 @@ input[type="date"].input { -webkit-appearance: none; appearance: none; }
 a.tag-link { text-decoration: none; padding: 4px 8px; }
 a.tag-link:active { background: rgba(255, 255, 255, 0.08); }
 
+.stepper { display: flex; gap: 8px; align-items: center; max-width: 220px; }
+.stepper button {
+    width: 44px; height: 44px; flex-shrink: 0; border-radius: 10px; border: 1px solid #333;
+    background: var(--raised); color: var(--text); font-size: 1.3rem; cursor: pointer;
+}
+.stepper .input { text-align: center; }
+
 .star-input { display: flex; gap: 4px; }
 .star-input button {
     width: 48px; height: 48px; border: none; background: transparent; cursor: pointer;

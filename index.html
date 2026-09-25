@@ -101,6 +101,33 @@
         .day-item-title { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .day-item-kr { font-size: 0.8rem; color: #8a94a6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .day-item-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; flex-shrink: 0; max-width: 45%; }
+        .read-check {
+            width: 44px; height: 44px; margin: -6px -6px -6px -10px; flex-shrink: 0; border: none; background: none;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0;
+        }
+        .read-check span {
+            width: 26px; height: 26px; border-radius: 50%; border: 2px solid #555; color: transparent;
+            display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: bold;
+        }
+        .read-check.on span { background: var(--status-ongoing); border-color: var(--status-ongoing); color: #fff; }
+        .day-item.read .day-item-title, .day-item.read .day-item-kr { opacity: 0.45; }
+        .day-item-progress { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 0.8rem; color: var(--text-sub); }
+        .ep-plus {
+            min-height: 30px; padding: 0 10px; border-radius: 15px; border: 1px solid var(--primary);
+            background: transparent; color: var(--primary); font-size: 0.78rem; font-weight: bold; cursor: pointer; position: relative;
+        }
+        .ep-plus::after { content: ''; position: absolute; inset: -7px -4px; } /* 放大點擊範圍 */
+        .ep-plus:active { background: rgba(52, 152, 219, 0.15); }
+        .ep-chip { font-size: 0.75rem; color: var(--text-sub); background: var(--raised); border-radius: 6px; padding: 2px 8px; white-space: nowrap; }
+
+        .toast {
+            position: fixed; left: 16px; right: 16px; bottom: calc(140px + var(--safe-bottom)); z-index: 200;
+            max-width: 480px; margin: auto; display: flex; align-items: center; gap: 12px;
+            padding: 10px 10px 10px 16px; border-radius: 12px; background: #2b303a; color: var(--text);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5); font-size: 0.9rem; animation: slideUp 0.2s ease-out;
+        }
+        .toast span { flex: 1; }
+        .toast button { min-height: 40px; padding: 0 12px; border: none; background: none; color: var(--primary); font-weight: bold; font-size: 0.9rem; cursor: pointer; }
         .day-empty { color: var(--text-muted); text-align: center; padding: 36px 0; font-size: 0.9rem; }
         .memo-panel .panel-title { color: var(--text-sub); }
         .memo-textarea { width: 100%; min-height: 120px; background: transparent; border: none; color: var(--text); font-family: inherit; font-size: 16px; line-height: 1.6; resize: none; padding: 0; }
@@ -225,6 +252,7 @@
         .open-link:active { background: var(--border); }
         .open-link .swatch { width: 10px; height: 10px; border-radius: 3px; }
         .open-link-icon { color: var(--text-muted); font-size: 0.85rem; }
+        .detail-progress { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 0.95rem; }
         .detail-stars { color: var(--star); font-size: 1.3rem; letter-spacing: 1px; }
         .detail-dates { display: flex; gap: 16px; font-size: 0.85rem; margin-bottom: 12px; }
         .comment-text { font-size: 1rem; color: var(--text-sub); line-height: 1.7; white-space: pre-wrap; word-break: break-word; background: var(--raised); padding: 12px 14px; border-radius: 10px; }
@@ -315,6 +343,7 @@
 </nav>
 
 <div class="backdrop" id="backdrop" onclick="Sheets.closeTop()"></div>
+<div class="toast" id="toast" hidden><span id="toastText"></span><button id="toastAction">復原</button></div>
 
 <!-- 更多功能選單 -->
 <div class="sheet" id="menuSheet">
@@ -558,7 +587,7 @@
                         </div>
                         <div class="card-stars">${starsText(r.rating)}</div>
                     </div>
-                    <div class="card-meta">${statusBadgeHtml(r)} ${platformLinkTagsHtml(r)}</div>
+                    <div class="card-meta">${statusBadgeHtml(r)} ${episodeText(r) ? `<span class="ep-chip">${episodeText(r)}</span>` : ''} ${platformLinkTagsHtml(r)}</div>
                     ${creators ? `<div class="card-creators">${creators}</div>` : ''}
                     ${relations ? `<div class="card-relations">${relations}</div>` : ''}
                     ${dates ? `<div class="card-dates">${dates}</div>` : ''}
@@ -581,26 +610,89 @@
     function renderWeekly() {
         const today = todayCode();
         document.getElementById('dayStrip').innerHTML = DAYS.map(day => {
-            const n = comicsOn(day).length;
+            const list = comicsOn(day);
+            const n = list.length;
+            const allRead = n > 0 && list.every(({ r }) => isReadThisWeek(r));
             const cls = [day === today && 'today', day === selectedDay && 'selected', !n && 'empty'].filter(Boolean).join(' ');
             return `<button class="day-btn ${cls}" role="tab" aria-selected="${day === selectedDay}" onclick="selectDay('${day}')">
-                <span class="day-name">${DAY_MAP[day]}</span><span class="day-count">${n || '·'}</span></button>`;
+                <span class="day-name">${DAY_MAP[day]}</span><span class="day-count">${allRead ? '✓' : (n || '·')}</span></button>`;
         }).join('');
 
         const items = comicsOn(selectedDay);
+        const readCount = items.filter(({ r }) => isReadThisWeek(r)).length;
         document.getElementById('dayHeadingTitle').textContent =
             `${DAY_FULL[selectedDay]}${selectedDay === today ? '・今天' : ''}`;
-        document.getElementById('dayHeadingSub').textContent = items.length ? `${items.length} 部更新` : '';
-        document.getElementById('dayList').innerHTML = items.length ? items.map(({ r, i }) => `
-            <div class="day-item" role="button" tabindex="0" onclick="openDetail(${i})" onkeydown="if (event.key === 'Enter') openDetail(${i})">
+        document.getElementById('dayHeadingSub').textContent = items.length ? `${items.length} 部更新・已讀 ${readCount}` : '';
+        document.getElementById('dayList').innerHTML = items.length ? items.map(({ r, i }) => {
+            const read = isReadThisWeek(r);
+            return `
+            <div class="day-item ${read ? 'read' : ''}" role="button" tabindex="0" onclick="openDetail(${i})" onkeydown="if (event.key === 'Enter') openDetail(${i})">
+                <button class="read-check ${read ? 'on' : ''}" onclick="event.stopPropagation(); toggleRead(${i})" aria-label="${read ? '標為未讀' : '標為已讀'}" aria-pressed="${read}"><span>✓</span></button>
                 <div class="day-item-dots">${(r.platforms || []).map(p => `<span style="background: ${platformColor(p)}"></span>`).join('')}</div>
                 <div class="day-item-main">
                     <div class="day-item-title">${escapeHtml(cleanTitleBrackets(r.title) || '未命名')}</div>
                     ${r.krTitle ? `<div class="day-item-kr">${escapeHtml(r.krTitle)}</div>` : ''}
+                    <div class="day-item-progress">${progressControlsHtml(r, i)}</div>
                 </div>
                 <div class="day-item-links">${platformLinkTagsHtml(r)}</div>
-            </div>`).join('')
+            </div>`;
+        }).join('')
             : `<div class="day-empty">${DAY_ZH[selectedDay]}沒有連載中的作品</div>`;
+    }
+
+    // ---------- 閱讀進度 ----------
+    function progressControlsHtml(r, i) {
+        return Number.isInteger(r.episode)
+            ? `<span>${episodeText(r)}</span><button class="ep-plus" onclick="event.stopPropagation(); addEpisode(${i})">+1 話</button>`
+            : `<button class="ep-plus" onclick="event.stopPropagation(); addEpisode(${i})">記錄話數</button>`;
+    }
+
+    // 看完一話：話數 +1，並把本週這部標為已讀
+    function addEpisode(i) {
+        const r = allReviews[i];
+        const before = { episode: r.episode, lastReadDate: r.lastReadDate };
+        if (Number.isInteger(r.episode)) {
+            r.episode += 1;
+        } else {
+            const input = prompt(`《${cleanTitleBrackets(r.title)}》看到第幾話？`);
+            const n = parseInt(input);
+            if (!Number.isInteger(n) || n < 0) return;
+            r.episode = n;
+        }
+        if (r.updateDay) r.lastReadDate = weekDateOf(r.updateDay);
+        saveProgress();
+        showToast(`《${cleanTitleBrackets(r.title)}》看到${episodeText(r)}`, () => {
+            Object.assign(r, before);
+            saveProgress();
+        });
+    }
+
+    function toggleRead(i) {
+        const r = allReviews[i];
+        r.lastReadDate = isReadThisWeek(r) ? '' : weekDateOf(r.updateDay);
+        saveProgress();
+    }
+
+    // 進度變更不算「編輯」，所以不更新 updatedAt（避免打亂「最近編輯」排序）
+    function saveProgress() {
+        Store.saveReviews(allReviews);
+        renderList();
+        renderWeekly();
+        if (currentEditIndex >= 0 && document.getElementById('detailSheet').classList.contains('open') && !isEditMode) {
+            renderDetailView(currentEditIndex);
+        }
+    }
+
+    let toastTimer;
+    function showToast(text, undo) {
+        const toast = document.getElementById('toast');
+        document.getElementById('toastText').textContent = text;
+        const action = document.getElementById('toastAction');
+        action.hidden = !undo;
+        action.onclick = () => { toast.hidden = true; undo(); };
+        toast.hidden = false;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { toast.hidden = true; }, 4000);
     }
 
     function selectDay(day) {
@@ -796,6 +888,7 @@
             ${r.krTitle ? `<div class="detail-kr">원제: ${escapeHtml(r.krTitle)}</div>` : ''}
             <div class="detail-meta">${statusBadgeHtml(r)} ${openLinks ? '' : platformTagsHtml(r.platforms)}</div>
             ${openLinks ? `<div class="open-links">${openLinks}</div>` : ''}
+            <div class="detail-progress">${progressControlsHtml(r, index)}</div>
             <div class="detail-stars">${starsText(r.rating)}</div>
             ${(r.startDate || r.endDate) ? `<div class="detail-dates">
                 ${r.startDate ? `<span style="color:#2ecc71;">시작 ${escapeHtml(r.startDate)}</span>` : ''}
@@ -899,6 +992,7 @@
             changed = true;
         }
         if (!changed) return;
+        migrateReviews(allReviews);
         Store.saveReviews(allReviews);
         document.getElementById('memoArea').value = Store.loadMemo();
         Sheets.closeTop();
