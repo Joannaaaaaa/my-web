@@ -10,6 +10,7 @@
     --text-sub: #bdc3c7;
     --text-muted: #7f8794;
     --star: #f1c40f;
+    --star-empty: #3a3f4a;
     --danger: #e74c3c;
     /* 狀態色：同時用於徽章與圖表，已驗證在深色背景上彼此可區分（含色盲） */
     --status-ongoing: #219a52;
@@ -99,12 +100,25 @@ a.tag-link:active { background: rgba(255, 255, 255, 0.08); }
 .episode-grid .episode-label { font-size: 0.78rem; margin-bottom: 4px; font-weight: normal; }
 .episode-grid .input { text-align: center; }
 
-.star-input { display: flex; gap: 4px; }
-.star-input button {
-    width: 48px; height: 48px; border: none; background: transparent; cursor: pointer;
-    font-size: 34px; line-height: 1; color: #333; padding: 0;
+.star-input { display: flex; gap: 4px; align-items: center; }
+.star-input .star {
+    position: relative; width: 48px; height: 48px; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 34px; line-height: 1; color: var(--star-empty);
 }
-.star-input button.on { color: var(--star); }
+.star-input .star.on { color: var(--star); }
+.star-input .star button { position: absolute; top: 0; bottom: 0; width: 50%; border: none; background: transparent; cursor: pointer; padding: 0; }
+.star-input .star .half-left { left: 0; }
+.star-input .star .half-right { right: 0; }
+.rating-number { margin-left: 8px; color: var(--text-sub); font-weight: bold; font-variant-numeric: tabular-nums; }
+
+/* 半顆星：左半邊上色 */
+.star-input .star.half, .stars-display .half {
+    background: linear-gradient(90deg, var(--star) 50%, var(--star-empty) 50%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.stars-display { white-space: nowrap; }
+.stars-display span { color: var(--star-empty); }
+.stars-display .on { color: var(--star); }
 .form-hint { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
 
 /* 封面 */

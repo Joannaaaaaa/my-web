@@ -13,7 +13,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-3">
+    <link rel="stylesheet" href="common.css?v=20260926-4">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -581,7 +581,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260926-3"></script>
+<script src="common.js?v=20260926-4"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added' }, Store.loadUi());
@@ -719,7 +719,7 @@
         const by = {
             'added-desc': (a, b) => b - a,
             'updated': (a, b) => (allReviews[b].updatedAtTs || 0) - (allReviews[a].updatedAtTs || 0) || b - a,
-            'rating': (a, b) => (allReviews[b].rating || 0) - (allReviews[a].rating || 0),
+            'rating': (a, b) => ratingValue(allReviews[b].rating) - ratingValue(allReviews[a].rating),
             'start': (a, b) => (allReviews[b].startDate || '').localeCompare(allReviews[a].startDate || ''),
             'end': (a, b) => (allReviews[b].endDate || '').localeCompare(allReviews[a].endDate || ''),
             'backlog': (a, b) => (backlogOf(allReviews[b]) ?? -1) - (backlogOf(allReviews[a]) ?? -1),
@@ -777,7 +777,7 @@
                             ${r.krTitle ? `<div class="comic-kr-title">${escapeHtml(r.krTitle)}</div>` : ''}
                             ${r.note ? `<div class="item-note card-note">📌 ${escapeHtml(r.note)}</div>` : ''}
                         </div>
-                        <div class="card-stars">${starsText(r.rating)}</div>
+                        <div class="card-stars">${starsHtml(r.rating)}</div>
                     </div>
                     <div class="card-meta">${statusBadgeHtml(r)} ${platformLinkTagsHtml(r)}</div>
                     ${creators ? `<div class="card-creators">${creators}</div>` : ''}
@@ -1048,8 +1048,8 @@
     }
 
     function renderKpis() {
-        const rated = allReviews.filter(r => parseInt(r.rating) > 0);
-        const avg = rated.length ? (rated.reduce((sum, r) => sum + parseInt(r.rating), 0) / rated.length).toFixed(1) : '–';
+        const rated = allReviews.filter(r => ratingValue(r.rating) > 0);
+        const avg = rated.length ? (rated.reduce((sum, r) => sum + ratingValue(r.rating), 0) / rated.length).toFixed(1) : '–';
         const count = s => allReviews.filter(r => statusOf(r) === s).length;
         const tiles = [
             ['作品總數', allReviews.length, '部'],
@@ -1109,12 +1109,13 @@
             </button>`).join('');
 
         const list = allReviews.filter(r => onPlatform(r, ratingPlatform));
-        const rated = list.filter(r => parseInt(r.rating) > 0);
-        const counts = [5, 4, 3, 2, 1].map(n => ({ n, value: list.filter(r => parseInt(r.rating) === n).length }));
+        // 半顆星歸在整數那一條：4.5 星算在 4 星
+        const rated = list.filter(r => ratingValue(r.rating) > 0);
+        const counts = [5, 4, 3, 2, 1].map(n => ({ n, value: list.filter(r => Math.floor(ratingValue(r.rating)) === n).length }));
         const max = Math.max(...counts.map(c => c.value));
         document.getElementById('ratingChart').innerHTML = max
             ? counts.map(c => barRowHtml(`<span class="stars-label">${'★'.repeat(c.n)}</span>`,
-                [{ value: c.value, color: 'var(--star)', tip: `${c.n} 星：${c.value} 部（佔已評分的 ${pct(c.value, rated.length)}%）` }], max)).join('')
+                [{ value: c.value, color: 'var(--star)', tip: `${c.n}${c.n < 5 ? `～${c.n}.5` : ''} 星：${c.value} 部（佔已評分的 ${pct(c.value, rated.length)}%）` }], max)).join('')
             : '<div class="chart-empty">這個平台還沒有評分</div>';
         const unrated = list.length - rated.length;
         setChartInfo('ratingInfo', max ? `點長條查看比例${unrated ? `・另有 ${unrated} 部未評分` : ''}` : '');
@@ -1172,8 +1173,8 @@
         const finished = allReviews.map((r, i) => ({ r, i })).filter(({ r }) => statusOf(r) === '已看完' && yearOf(r.endDate) === reviewYear);
         const started = allReviews.filter(r => yearOf(r.startDate) === reviewYear);
         const yearWorks = allReviews.filter(r => yearOf(r.startDate) === reviewYear || yearOf(r.endDate) === reviewYear);
-        const rated = finished.filter(({ r }) => parseInt(r.rating) > 0);
-        const avg = rated.length ? (rated.reduce((s, { r }) => s + parseInt(r.rating), 0) / rated.length).toFixed(1) : '–';
+        const rated = finished.filter(({ r }) => ratingValue(r.rating) > 0);
+        const avg = rated.length ? (rated.reduce((s, { r }) => s + ratingValue(r.rating), 0) / rated.length).toFixed(1) : '–';
 
         // 每月看完
         const months = Array.from({ length: 12 }, (_, m) => finished.filter(({ r }) => parseInt(r.endDate.slice(5, 7)) === m + 1).length);
@@ -1204,7 +1205,7 @@
         const topCreators = Object.entries(creatorCounts).filter(([, n]) => n > 1)
             .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5);
 
-        const favorites = finished.filter(({ r }) => parseInt(r.rating) === 5);
+        const favorites = finished.filter(({ r }) => ratingValue(r.rating) === 5);
 
         content.innerHTML = `
             <div class="kpi-grid three">
@@ -1244,7 +1245,7 @@
         document.getElementById('statusStatsTable').innerHTML = head + statusRows + totalRow;
 
         const ratingRows = [5, 4, 3, 2, 1].map(n =>
-            `<tr><td class="row-head" style="color: var(--star);">${'★'.repeat(n)}</td>${PLATFORMS.map(p => cell(count(r => parseInt(r.rating) === n, p))).join('')}</tr>`).join('');
+            `<tr><td class="row-head" style="color: var(--star);">${'★'.repeat(n)}</td>${PLATFORMS.map(p => cell(count(r => Math.floor(ratingValue(r.rating)) === n, p))).join('')}</tr>`).join('');
         document.getElementById('ratingStatsTable').innerHTML = head + ratingRows;
     }
 
@@ -1298,7 +1299,7 @@
                     <div class="detail-progress">${progressControlsHtml(r, index)}</div>
                 </div>
             </div>
-            <div class="detail-stars">${starsText(r.rating)}</div>
+            <div class="detail-stars">${starsHtml(r.rating)}</div>
             ${(r.startDate || r.endDate) ? `<div class="detail-dates">
                 ${r.startDate ? `<span style="color:#2ecc71;">시작 ${escapeHtml(r.startDate)}</span>` : ''}
                 ${r.endDate ? `<span style="color:#e74c3c;">끝 ${escapeHtml(r.endDate)}</span>` : ''}
@@ -1497,8 +1498,8 @@
 
     function openCreator(name) {
         const works = worksByCreator(name);
-        const rated = works.filter(w => parseInt(w.r.rating) > 0);
-        const avg = rated.length ? (rated.reduce((s, w) => s + parseInt(w.r.rating), 0) / rated.length).toFixed(1) : null;
+        const rated = works.filter(w => ratingValue(w.r.rating) > 0);
+        const avg = rated.length ? (rated.reduce((s, w) => s + ratingValue(w.r.rating), 0) / rated.length).toFixed(1) : null;
         const roleCounts = {};
         works.forEach(w => w.roles.forEach(role => { roleCounts[role] = (roleCounts[role] || 0) + 1; }));
 
@@ -1515,7 +1516,7 @@
                         ${r.krTitle ? `<div class="day-item-kr">${escapeHtml(r.krTitle)}</div>` : ''}
                         <div class="work-roles">${roles.join('・')}</div>
                     </div>
-                    <div class="work-side">${statusBadgeHtml(r)}<span class="card-stars">${starsText(r.rating)}</span></div>
+                    <div class="work-side">${statusBadgeHtml(r)}<span class="card-stars">${starsHtml(r.rating)}</span></div>
                 </div>`).join('')}
         `;
         document.getElementById('creatorBody').scrollTop = 0;

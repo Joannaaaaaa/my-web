@@ -454,8 +454,20 @@ function parseCommentNotes(review) {
     return { comment: text.slice(0, headers[0].start).replace(/[（(]\s*$/, '').trim(), notes, flags };
 }
 
+// 評分以 0.5 為單位（0 = 未評分）
+function ratingValue(rating) {
+    return Math.max(0, Math.min(5, Math.round((parseFloat(rating) || 0) * 2) / 2));
+}
+
+// 星星顯示：整顆、半顆（左半邊上色）、空的
+function starsHtml(rating) {
+    const r = ratingValue(rating);
+    return `<span class="stars-display" aria-label="${r ? `${r} 星` : '未評分'}">${[1, 2, 3, 4, 5].map(k =>
+        `<span class="${r >= k ? 'on' : r === k - 0.5 ? 'half' : ''}">★</span>`).join('')}</span>`;
+}
+
 function starsText(rating) {
-    const r = Math.max(0, Math.min(5, parseInt(rating) || 0));
+    const r = Math.floor(ratingValue(rating));
     return '★'.repeat(r) + '☆'.repeat(5 - r);
 }
 
@@ -693,9 +705,14 @@ function createReviewForm(container, options = {}) {
         <div class="form-section">
             <label class="form-label">評分</label>
             <div class="star-input" data-group="rating">
-                ${[1, 2, 3, 4, 5].map(n => `<button type="button" data-value="${n}" aria-label="${n} 星">★</button>`).join('')}
+                ${[1, 2, 3, 4, 5].map(n => `
+                    <span class="star" data-star="${n}">★
+                        <button type="button" class="half-left" data-value="${n - 0.5}" aria-label="${n - 0.5} 星"></button>
+                        <button type="button" class="half-right" data-value="${n}" aria-label="${n} 星"></button>
+                    </span>`).join('')}
+                <span class="rating-number" data-role="rating-number"></span>
             </div>
-            <div class="form-hint">再點一次目前的星等可以清除評分</div>
+            <div class="form-hint">點星星左半邊是半顆；再點一次目前的評分可以清除</div>
         </div>
         <div class="form-section form-row">
             <div>
@@ -731,7 +748,12 @@ function createReviewForm(container, options = {}) {
         container.querySelectorAll('[data-group="status"] .chip').forEach(b => b.classList.toggle('selected', b.dataset.value === state.status));
         container.querySelectorAll('[data-group="day"] .chip').forEach(b => b.classList.toggle('selected', b.dataset.value === state.updateDay));
         container.querySelectorAll('[data-group="platform"] .chip').forEach(b => b.classList.toggle('selected', state.platforms.includes(b.dataset.value)));
-        container.querySelectorAll('[data-group="rating"] button').forEach(b => b.classList.toggle('on', parseInt(b.dataset.value) <= state.rating));
+        container.querySelectorAll('[data-group="rating"] .star').forEach(star => {
+            const k = Number(star.dataset.star);
+            star.classList.toggle('on', state.rating >= k);
+            star.classList.toggle('half', state.rating === k - 0.5);
+        });
+        $('[data-role="rating-number"]').textContent = state.rating ? state.rating : '';
         container.querySelectorAll('[data-link-row]').forEach(row => { row.hidden = !state.platforms.includes(row.dataset.linkRow); });
         $('[data-role="day-section"]').style.display = state.status === DEFAULT_STATUS ? '' : 'none';
         $('[data-role="return-section"]').style.display = state.status === '休刊' ? '' : 'none';
@@ -790,7 +812,7 @@ function createReviewForm(container, options = {}) {
     container.addEventListener('click', e => {
         const btn = e.target.closest('button[data-value]');
         if (!btn) return;
-        const group = btn.parentElement.dataset.group;
+        const group = btn.closest('[data-group]').dataset.group;
         const value = btn.dataset.value;
         if (group === 'status') state.status = value;
         if (group === 'day') state.updateDay = state.updateDay === value ? '' : value;
@@ -800,7 +822,7 @@ function createReviewForm(container, options = {}) {
                 : [...state.platforms, value];
         }
         if (group === 'rating') {
-            const n = parseInt(value);
+            const n = Number(value);
             state.rating = state.rating === n ? 0 : n;
         }
         changed();
@@ -851,7 +873,7 @@ function createReviewForm(container, options = {}) {
         state.status = STATUS_CONFIG[data.status] ? data.status : DEFAULT_STATUS;
         state.updateDay = DAY_MAP[data.updateDay] ? data.updateDay : '';
         state.platforms = [...(data.platforms || [])];
-        state.rating = Math.max(0, Math.min(5, parseInt(data.rating) || 0));
+        state.rating = ratingValue(data.rating);
         state.coverId = data.coverId || '';
         refreshCover();
         refreshChips();
