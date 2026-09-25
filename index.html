@@ -813,31 +813,33 @@
 
     // ---------- 閱讀進度 ----------
     function episodeBadgeHtml(r) {
-        const ep = formatEpisode(r.episode);
-        return ep ? `<span class="ep-badge">${ep}話</span>` : '';
+        const label = episodeLabel(r.episode);
+        return label ? `<span class="ep-badge">${label}</span>` : '';
     }
 
     function progressControlsHtml(r, i) {
-        return formatEpisode(r.episode)
-            ? `<button class="ep-plus" onclick="event.stopPropagation(); addEpisode(${i})">+1 話</button>`
+        // 按鈕文字標出會加在哪一段：+1 話／+1 外傳／+1 後記
+        const part = currentEpisodePart(r.episode);
+        return episodeLabel(r.episode)
+            ? `<button class="ep-plus" onclick="event.stopPropagation(); addEpisode(${i})">+1 ${part.key === 'main' ? '話' : part.label}</button>`
             : `<button class="ep-plus" onclick="event.stopPropagation(); addEpisode(${i})">記錄話數</button>`;
     }
 
     // 看完一話：話數 +1，並把本週這部標為已讀
     function addEpisode(i) {
         const r = allReviews[i];
-        const before = { episode: r.episode, lastReadDate: r.lastReadDate };
-        if (formatEpisode(r.episode)) {
+        const before = { episode: r.episode && typeof r.episode === 'object' ? { ...r.episode } : r.episode, lastReadDate: r.lastReadDate };
+        if (episodeLabel(r.episode)) {
             r.episode = stepEpisode(r.episode, 1);
         } else {
-            const input = prompt(`《${cleanTitleBrackets(r.title)}》看到第幾話？\n有外傳、後記可以寫成 70+2+1`);
+            const input = prompt(`《${cleanTitleBrackets(r.title)}》本篇看到第幾話？\n（外傳、後記可以之後在編輯裡填）`);
             if (input === null) return;
-            if (!parseEpisode(input)) return alert('格式不正確，請輸入數字，例如 64 或 70+2+1');
-            r.episode = formatEpisode(input);
+            if (!/^\s*\d+\s*$/.test(input)) return alert('請輸入數字');
+            r.episode = { main: parseInt(input) };
         }
         if (r.updateDay) r.lastReadDate = weekDateOf(r.updateDay);
         saveProgress();
-        showToast(`《${cleanTitleBrackets(r.title)}》看到${episodeText(r)}`, () => {
+        showToast(`《${cleanTitleBrackets(r.title)}》${episodeText(r)}`, () => {
             Object.assign(r, before);
             saveProgress();
         });

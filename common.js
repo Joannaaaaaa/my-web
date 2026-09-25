@@ -114,29 +114,54 @@ function daysUntil(dateStr) {
 }
 
 // ---------- 話數 ----------
-// 話數可分段：「70+2+1」= 正篇 70＋外傳 2＋後記 1。舊資料可能是數字 64。
-function parseEpisode(value) {
-    if (value === undefined || value === null) return null;
-    const text = String(value).replace(/\s/g, '').replace(/＋/g, '+'); // 中文輸入法常打出全形＋
-    if (!/^\d+(\+\d+)*$/.test(text)) return null;
-    return text.split('+').map(Number);
+// episode = { main: 本篇, side: 外傳, after: 後記 }，三段皆選填，沒有就不存。
+const EPISODE_PARTS = [
+    { key: 'main', label: '本篇', short: '' },
+    { key: 'side', label: '外傳', short: '外' },
+    { key: 'after', label: '後記', short: '後' },
+];
+
+// 統一轉成 { main?, side?, after? } 或 null；也接受舊格式：數字 64、字串 "70+2+1"（依序 = 本篇+外傳+後記）
+function normalizeEpisode(value) {
+    if (value === undefined || value === null || value === '') return null;
+    let parts = {};
+    if (typeof value === 'object') {
+        EPISODE_PARTS.forEach(({ key }) => {
+            const n = parseInt(value[key]);
+            if (Number.isInteger(n) && n >= 0) parts[key] = n;
+        });
+    } else {
+        const text = String(value).replace(/\s/g, '').replace(/＋/g, '+'); // 中文輸入法常打出全形＋
+        if (!/^\d+(\+\d+){0,2}$/.test(text)) return null;
+        text.split('+').forEach((n, k) => { parts[EPISODE_PARTS[k].key] = Number(n); });
+    }
+    return Object.keys(parts).length ? parts : null;
 }
 
-function formatEpisode(value) {
-    const parts = parseEpisode(value);
-    return parts ? parts.join('+') : '';
+// 顯示用：70話、70話·外2、70話·外2·後1、70話·後1
+function episodeLabel(value) {
+    const ep = normalizeEpisode(value);
+    if (!ep) return '';
+    return EPISODE_PARTS.filter(({ key }) => ep[key] !== undefined)
+        .map(({ key, short }) => key === 'main' ? `${ep.main}話` : `${short}${ep[key]}`).join('·');
 }
 
-// +1 加在最後一段：70 → 71、70+2 → 70+3
+// 目前在看的段落：有後記就是後記，其次外傳，否則本篇
+function currentEpisodePart(value) {
+    const ep = normalizeEpisode(value) || {};
+    return [...EPISODE_PARTS].reverse().find(({ key }) => ep[key] !== undefined) || EPISODE_PARTS[0];
+}
+
 function stepEpisode(value, step) {
-    const parts = parseEpisode(value) || [0];
-    parts[parts.length - 1] = Math.max(0, parts[parts.length - 1] + step);
-    return parts.join('+');
+    const ep = normalizeEpisode(value) || { main: 0 };
+    const { key } = currentEpisodePart(ep);
+    ep[key] = Math.max(0, ep[key] + step);
+    return ep;
 }
 
 function episodeText(review) {
-    const ep = formatEpisode(review.episode);
-    return ep ? `第 ${ep} 話` : '';
+    const label = episodeLabel(review.episode);
+    return label ? `看到 ${label}` : '';
 }
 
 function starsText(rating) {
@@ -156,15 +181,21 @@ function readJson(key, fallback) {
     }
 }
 
-// 舊資料把話數寫在標題括號裡，例如「上流社會 (64)」「上流社會 (70+2+1)」；搬到 episode 欄位
+// 舊資料遷移：
+// 1. 話數寫在標題括號裡，例如「上流社會 (64)」「上流社會 (70+2+1)」→ 搬到 episode 欄位
+// 2. episode 是舊格式（數字 64、字串 "70+2+1"）→ 轉成 { main, side, after }
 function migrateReviews(list) {
     let changed = false;
     list.forEach(r => {
+        if (r.episode !== undefined && r.episode !== '' && typeof r.episode !== 'object') {
+            r.episode = normalizeEpisode(r.episode) || '';
+            changed = true;
+        }
         if (r.episode !== undefined && r.episode !== '') return;
-        const m = (r.title || '').match(/^(.*?)\s*[（(]\s*(\d+(?:\s*[+＋]\s*\d+)*)\s*[)）]\s*$/);
+        const m = (r.title || '').match(/^(.*?)\s*[（(]\s*(\d+(?:\s*[+＋]\s*\d+){0,2})\s*[)）]\s*$/);
         if (!m || !m[1].trim()) return;
         r.title = m[1].trim();
-        r.episode = formatEpisode(m[2]);
+        r.episode = normalizeEpisode(m[2]);
         changed = true;
     });
     return changed;
@@ -224,12 +255,14 @@ function createReviewForm(container, options = {}) {
         </div>
         <div class="form-section">
             <label class="form-label">看到第幾話</label>
-            <div class="stepper">
-                <button type="button" data-step="-1" aria-label="減一話">−</button>
-                <input class="input" type="text" inputmode="tel" autocomplete="off" data-field="episode" placeholder="—">
-                <button type="button" data-step="1" aria-label="加一話">＋</button>
+            <div class="episode-grid">
+                ${EPISODE_PARTS.map(({ key, label }) => `
+                    <div>
+                        <label class="form-label episode-label">${label}</label>
+                        <input class="input" type="text" inputmode="numeric" autocomplete="off" data-ep="${key}" placeholder="—">
+                    </div>`).join('')}
             </div>
-            <div class="form-hint" data-role="episode-hint">有外傳、後記時用「+」分開，例如 70+2+1；＋／− 會調整最後一段</div>
+            <div class="form-hint">有才填；「+1 話」會加在最後一個有填的欄位</div>
         </div>
         <div class="form-section">
             <label class="form-label">發行平台</label>
@@ -301,13 +334,6 @@ function createReviewForm(container, options = {}) {
     }
 
     container.addEventListener('click', e => {
-        const stepBtn = e.target.closest('button[data-step]');
-        if (stepBtn) {
-            const input = $('[data-field="episode"]');
-            input.value = stepEpisode(input.value, parseInt(stepBtn.dataset.step));
-            changed();
-            return;
-        }
         const btn = e.target.closest('button[data-value]');
         if (!btn) return;
         const group = btn.parentElement.dataset.group;
@@ -335,9 +361,14 @@ function createReviewForm(container, options = {}) {
             const p = el.dataset.link;
             if (state.platforms.includes(p) && el.value.trim()) links[p] = el.value.trim();
         });
+        const episode = {};
+        container.querySelectorAll('[data-ep]').forEach(el => {
+            const n = parseInt(el.value);
+            if (/^\d+$/.test(el.value.trim()) && n >= 0) episode[el.dataset.ep] = n;
+        });
         return {
             ...data,
-            episode: formatEpisode(data.episode),
+            episode: Object.keys(episode).length ? episode : '',
             links,
             status: state.status,
             updateDay: state.status === DEFAULT_STATUS ? state.updateDay : '',
@@ -350,6 +381,8 @@ function createReviewForm(container, options = {}) {
     function setData(data = {}) {
         textFields.forEach(el => { el.value = data[el.dataset.field] ?? ''; });
         container.querySelectorAll('[data-link]').forEach(el => { el.value = (data.links || {})[el.dataset.link] || ''; });
+        const ep = normalizeEpisode(data.episode) || {};
+        container.querySelectorAll('[data-ep]').forEach(el => { el.value = ep[el.dataset.ep] ?? ''; });
         state.status = STATUS_CONFIG[data.status] ? data.status : DEFAULT_STATUS;
         state.updateDay = DAY_MAP[data.updateDay] ? data.updateDay : '';
         state.platforms = [...(data.platforms || [])];
@@ -360,9 +393,11 @@ function createReviewForm(container, options = {}) {
 
     // 回傳錯誤訊息，沒問題則回傳空字串
     function validate() {
-        const ep = $('[data-field="episode"]').value.trim();
-        if (ep && !parseEpisode(ep)) return '話數格式不正確，請輸入數字，外傳、後記用「+」分開，例如 70+2+1';
-        return '';
+        const bad = EPISODE_PARTS.find(({ key }) => {
+            const v = $(`[data-ep="${key}"]`).value.trim();
+            return v && !/^\d+$/.test(v);
+        });
+        return bad ? `「${bad.label}」話數只能填數字` : '';
     }
 
     function markClean() { cleanSnapshot = JSON.stringify(getData()); }
