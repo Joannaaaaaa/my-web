@@ -105,6 +105,14 @@ function isReadThisWeek(review) {
     return !!review.updateDay && review.lastReadDate === weekDateOf(review.updateDay);
 }
 
+// 距離某日期還有幾天（今天 = 0，過去為負數）
+function daysUntil(dateStr) {
+    if (!dateStr) return null;
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const now = new Date();
+    return Math.round((new Date(y, m - 1, d) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 864e5);
+}
+
 function episodeText(review) {
     return Number.isInteger(review.episode) ? `第 ${review.episode} 話` : '';
 }
@@ -187,6 +195,11 @@ function createReviewForm(container, options = {}) {
                 ${DAYS.map(d => `<button type="button" class="chip chip-day" data-value="${d}">${DAY_MAP[d]}</button>`).join('')}
             </div>
         </div>
+        <div class="form-section" data-role="return-section">
+            <label class="form-label">預計回歸日</label>
+            <input class="input" type="date" data-field="returnDate" style="max-width: 220px;">
+            <div class="form-hint">到了這天，本週頁和首頁上方會提醒你</div>
+        </div>
         <div class="form-section">
             <label class="form-label">看到第幾話</label>
             <div class="stepper">
@@ -254,6 +267,7 @@ function createReviewForm(container, options = {}) {
         container.querySelectorAll('[data-group="rating"] button').forEach(b => b.classList.toggle('on', parseInt(b.dataset.value) <= state.rating));
         container.querySelectorAll('[data-link-row]').forEach(row => { row.hidden = !state.platforms.includes(row.dataset.linkRow); });
         $('[data-role="day-section"]').style.display = state.status === DEFAULT_STATUS ? '' : 'none';
+        $('[data-role="return-section"]').style.display = state.status === '休刊' ? '' : 'none';
         const filled = JOB_KEYS.filter(j => $(`[data-field="${j.key}"]`).value.trim()).length;
         $('[data-role="team-count"]').textContent = filled ? `(已填 ${filled} 項)` : '';
     }
@@ -305,6 +319,7 @@ function createReviewForm(container, options = {}) {
             links,
             status: state.status,
             updateDay: state.status === DEFAULT_STATUS ? state.updateDay : '',
+            returnDate: state.status === '休刊' ? data.returnDate : '',
             platforms: [...state.platforms],
             rating: state.rating,
         };

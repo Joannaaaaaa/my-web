@@ -128,6 +128,25 @@
         }
         .toast span { flex: 1; }
         .toast button { min-height: 40px; padding: 0 12px; border: none; background: none; color: var(--primary); font-weight: bold; font-size: 0.9rem; cursor: pointer; }
+        .return-banner {
+            display: flex; align-items: center; gap: 8px; max-width: 1000px; margin: 4px auto 0; padding: 0 16px;
+        }
+        .return-banner-inner {
+            flex: 1; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 14px; border-radius: 12px;
+            background: rgba(138, 112, 200, 0.18); border: 1px solid var(--status-paused); font-size: 0.88rem;
+        }
+        .return-banner-inner span { flex: 1; }
+        .return-banner-inner .btn { min-height: 36px; padding: 0 12px; font-size: 0.82rem; }
+        .return-item { display: flex; align-items: center; gap: 12px; padding: 10px 2px; min-height: 56px; border-bottom: 1px solid var(--border); cursor: pointer; }
+        .return-item:last-child { border-bottom: none; }
+        .return-item:active { background: var(--raised); }
+        .return-main { flex: 1; min-width: 0; }
+        .return-when { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+        .return-count { flex-shrink: 0; text-align: right; font-variant-numeric: tabular-nums; }
+        .return-count b { font-size: 1.3rem; }
+        .return-count small { color: var(--text-muted); font-size: 0.75rem; margin-left: 2px; }
+        .return-when.due { color: #b9a6ef; font-weight: bold; }
+        .return-note { font-size: 0.8rem; color: var(--text-muted); padding-top: 8px; }
         .day-empty { color: var(--text-muted); text-align: center; padding: 36px 0; font-size: 0.9rem; }
         .memo-panel .panel-title { color: var(--text-sub); }
         .memo-textarea { width: 100%; min-height: 120px; background: transparent; border: none; color: var(--text); font-family: inherit; font-size: 16px; line-height: 1.6; resize: none; padding: 0; }
@@ -272,6 +291,8 @@
     <button class="icon-btn" onclick="Sheets.open('menuSheet')" aria-label="更多功能">⋯</button>
 </header>
 
+<div class="return-banner" id="returnBanner" hidden></div>
+
 <main class="page">
     <!-- 作品列表 -->
     <section class="tab-panel" id="tab-list">
@@ -303,6 +324,10 @@
                 <span class="day-heading-sub" id="dayHeadingSub"></span>
             </div>
             <div class="day-list" id="dayList"></div>
+        </div>
+        <div class="panel" id="returnPanel" hidden>
+            <div class="panel-title">⏸ 休刊回歸</div>
+            <div id="returnList"></div>
         </div>
         <div class="panel memo-panel">
             <div class="panel-title">📝 備忘錄</div>
@@ -555,7 +580,11 @@
 
     function statusBadgeHtml(r) {
         const status = r.status || DEFAULT_STATUS;
-        const day = status === DEFAULT_STATUS && DAY_MAP[r.updateDay] ? ` · ${DAY_MAP[r.updateDay]}` : '';
+        let day = status === DEFAULT_STATUS && DAY_MAP[r.updateDay] ? ` · ${DAY_MAP[r.updateDay]}` : '';
+        if (status === '休刊' && r.returnDate) {
+            const n = daysUntil(r.returnDate);
+            day = n > 0 ? ` · ${n} 天後回歸` : ' · 已到回歸日';
+        }
         return `<span class="status-badge ${STATUS_CONFIG[status]?.cls || 'status-ongoing'}">${escapeHtml(status)}${day}</span>`;
     }
 
@@ -638,6 +667,86 @@
             </div>`;
         }).join('')
             : `<div class="day-empty">${DAY_ZH[selectedDay]}沒有連載中的作品</div>`;
+    }
+
+    // ---------- 休刊回歸 ----------
+    const WEEKDAY_ZH = ['日', '一', '二', '三', '四', '五', '六'];
+
+    function formatShortDate(dateStr) {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        return `${m}/${d}（${WEEKDAY_ZH[new Date(y, m - 1, d).getDay()]}）`;
+    }
+
+    function pausedWorks() {
+        return allReviews.map((r, i) => ({ r, i })).filter(({ r }) => r.status === '休刊');
+    }
+
+    function renderReturns() {
+        const paused = pausedWorks();
+        const dated = paused.filter(({ r }) => r.returnDate)
+            .sort((a, b) => a.r.returnDate.localeCompare(b.r.returnDate));
+        const undated = paused.length - dated.length;
+        document.getElementById('returnPanel').hidden = paused.length === 0;
+        document.getElementById('returnList').innerHTML = dated.map(({ r, i }) => {
+            const days = daysUntil(r.returnDate);
+            const count = days > 0
+                ? `<div class="return-count"><b>${days}</b><small>天後</small></div>`
+                : `<button class="btn btn-primary" style="min-height:36px; padding:0 12px; font-size:0.82rem;" onclick="event.stopPropagation(); resumeSerial(${i})">改為連載中</button>`;
+            const when = days > 0 ? formatShortDate(r.returnDate)
+                : days === 0 ? `今天回歸 🎉` : `${formatShortDate(r.returnDate)} 已到回歸日`;
+            return `
+                <div class="return-item" role="button" tabindex="0" onclick="openDetail(${i})">
+                    <div class="return-main">
+                        <div class="day-item-title">${escapeHtml(r.title || '未命名')}</div>
+                        <div class="return-when ${days <= 0 ? 'due' : ''}">${when}</div>
+                    </div>
+                    ${count}
+                </div>`;
+        }).join('') + (undated ? `<div class="return-note">另有 ${undated} 部休刊作品還沒填回歸日</div>` : '');
+        renderReturnBanner();
+    }
+
+    // 到了回歸日就在首頁上方提醒；按 ✕ 當天不再顯示
+    function renderReturnBanner() {
+        const due = pausedWorks().filter(({ r }) => r.returnDate && daysUntil(r.returnDate) <= 0);
+        const banner = document.getElementById('returnBanner');
+        if (!due.length || ui.returnDismissed === toDateStr(new Date())) {
+            banner.hidden = true;
+            return;
+        }
+        const text = due.length === 1
+            ? `🎉《${escapeHtml(cleanTitleBrackets(due[0].r.title))}》${daysUntil(due[0].r.returnDate) === 0 ? '今天回歸' : '已到回歸日'}`
+            : `🎉 有 ${due.length} 部休刊作品到了回歸日`;
+        banner.innerHTML = `
+            <div class="return-banner-inner">
+                <span>${text}</span>
+                <button class="btn btn-primary" onclick="showReturns()">查看</button>
+                <button class="icon-btn" style="width:36px;height:36px;font-size:1rem;" onclick="dismissReturnBanner()" aria-label="今天不再提醒">✕</button>
+            </div>`;
+        banner.hidden = false;
+    }
+
+    function showReturns() {
+        switchTab('weekly');
+        document.getElementById('returnPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function dismissReturnBanner() {
+        ui.returnDismissed = toDateStr(new Date());
+        Store.saveUi(ui);
+        renderReturnBanner();
+    }
+
+    // 改回連載中，並直接打開編輯讓使用者選更新日
+    function resumeSerial(i) {
+        const r = allReviews[i];
+        r.status = DEFAULT_STATUS;
+        r.returnDate = '';
+        Store.saveReviews(allReviews);
+        renderAll();
+        openDetail(i);
+        enterEditMode();
+        showToast(`《${cleanTitleBrackets(r.title)}》已改為連載中，請選擇更新日`);
     }
 
     // ---------- 閱讀進度 ----------
@@ -1027,6 +1136,7 @@
         renderStatusChips();
         renderList();
         renderWeekly();
+        renderReturns();
         renderStats();
     }
 
