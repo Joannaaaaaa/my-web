@@ -64,7 +64,8 @@
         @media (hover: hover) { .review-card:hover { border-color: var(--primary); } }
         .review-card { display: flex; gap: 12px; align-items: flex-start; }
         .card-body { flex: 1; min-width: 0; }
-        .detail-head { display: flex; gap: 14px; align-items: flex-start; }
+        .detail-head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 16px; }
+        .detail-head .open-links, .detail-head .detail-progress { margin: 10px 0 0; }
         .detail-head-text { flex: 1; min-width: 0; }
         .card-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
         .comic-title { font-size: 1.02rem; font-weight: bold; color: #fff; margin: 0; line-height: 1.35; border-left: 3px solid var(--primary); padding-left: 8px; }
@@ -304,7 +305,7 @@
         .detail-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
         .open-links { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
         .open-link {
-            display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px;
+            display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px;
             border-radius: 10px; background: var(--raised); border: 1px solid var(--border);
             color: var(--text); text-decoration: none; font-size: 0.9rem; font-weight: bold;
         }
@@ -1156,9 +1157,10 @@
         const openLinks = (r.platforms || []).map(p => {
             const link = platformLink(r, p);
             if (!link) return '';
-            return `<a class="open-link" href="${escapeHtml(link.url)}" target="_blank" rel="noopener" style="--tag-color: ${platformColor(p)}">
+            return `<a class="open-link" href="${escapeHtml(link.url)}" target="_blank" rel="noopener" style="--tag-color: ${platformColor(p)}"
+                aria-label="${link.isSearch ? `在 ${escapeHtml(p)} 搜尋` : `到 ${escapeHtml(p)} 看`}">
                 <span class="swatch" style="background: ${platformColor(p)}"></span>
-                ${link.isSearch ? `在 ${escapeHtml(p)} 搜尋` : `到 ${escapeHtml(p)} 看`}<span class="open-link-icon">${link.isSearch ? '🔍' : '↗'}</span></a>`;
+                ${escapeHtml(PLATFORM_CONFIG[p]?.short || p)}<span class="open-link-icon">${link.isSearch ? '🔍' : '↗'}</span></a>`;
         }).join('');
 
         document.getElementById('detailHeaderTitle').textContent = r.title || '未命名';
@@ -1169,10 +1171,10 @@
                     <h2 class="detail-title">${escapeHtml(r.title || '未命名')}${episodeBadgeHtml(r)}</h2>
                     ${r.krTitle ? `<div class="detail-kr">원제: ${escapeHtml(r.krTitle)}</div>` : ''}
                     <div class="detail-meta">${statusBadgeHtml(r)} ${openLinks ? '' : platformTagsHtml(r.platforms)}</div>
+                    ${openLinks ? `<div class="open-links">${openLinks}</div>` : ''}
+                    <div class="detail-progress">${progressControlsHtml(r, index)}</div>
                 </div>
             </div>
-            ${openLinks ? `<div class="open-links">${openLinks}</div>` : ''}
-            <div class="detail-progress">${progressControlsHtml(r, index)}</div>
             <div class="detail-stars">${starsText(r.rating)}</div>
             ${(r.startDate || r.endDate) ? `<div class="detail-dates">
                 ${r.startDate ? `<span style="color:#2ecc71;">시작 ${escapeHtml(r.startDate)}</span>` : ''}
