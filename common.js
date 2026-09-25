@@ -113,8 +113,30 @@ function daysUntil(dateStr) {
     return Math.round((new Date(y, m - 1, d) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 864e5);
 }
 
+// ---------- 話數 ----------
+// 話數可分段：「70+2+1」= 正篇 70＋外傳 2＋後記 1。舊資料可能是數字 64。
+function parseEpisode(value) {
+    if (value === undefined || value === null) return null;
+    const text = String(value).replace(/\s/g, '').replace(/＋/g, '+'); // 中文輸入法常打出全形＋
+    if (!/^\d+(\+\d+)*$/.test(text)) return null;
+    return text.split('+').map(Number);
+}
+
+function formatEpisode(value) {
+    const parts = parseEpisode(value);
+    return parts ? parts.join('+') : '';
+}
+
+// +1 加在最後一段：70 → 71、70+2 → 70+3
+function stepEpisode(value, step) {
+    const parts = parseEpisode(value) || [0];
+    parts[parts.length - 1] = Math.max(0, parts[parts.length - 1] + step);
+    return parts.join('+');
+}
+
 function episodeText(review) {
-    return Number.isInteger(review.episode) ? `第 ${review.episode} 話` : '';
+    const ep = formatEpisode(review.episode);
+    return ep ? `第 ${ep} 話` : '';
 }
 
 function starsText(rating) {
@@ -134,15 +156,15 @@ function readJson(key, fallback) {
     }
 }
 
-// 舊資料把「看到第幾話」寫在標題括號裡，例如「上流社會 (64)」；搬到 episode 欄位
+// 舊資料把話數寫在標題括號裡，例如「上流社會 (64)」「上流社會 (70+2+1)」；搬到 episode 欄位
 function migrateReviews(list) {
     let changed = false;
     list.forEach(r => {
-        if (r.episode !== undefined) return;
-        const m = (r.title || '').match(/^(.*?)\s*[（(]\s*(\d+)\s*[)）]\s*$/);
+        if (r.episode !== undefined && r.episode !== '') return;
+        const m = (r.title || '').match(/^(.*?)\s*[（(]\s*(\d+(?:\s*[+＋]\s*\d+)*)\s*[)）]\s*$/);
         if (!m || !m[1].trim()) return;
         r.title = m[1].trim();
-        r.episode = parseInt(m[2]);
+        r.episode = formatEpisode(m[2]);
         changed = true;
     });
     return changed;
@@ -204,9 +226,10 @@ function createReviewForm(container, options = {}) {
             <label class="form-label">看到第幾話</label>
             <div class="stepper">
                 <button type="button" data-step="-1" aria-label="減一話">−</button>
-                <input class="input" type="number" inputmode="numeric" min="0" data-field="episode" placeholder="—">
+                <input class="input" type="text" inputmode="tel" autocomplete="off" data-field="episode" placeholder="—">
                 <button type="button" data-step="1" aria-label="加一話">＋</button>
             </div>
+            <div class="form-hint" data-role="episode-hint">有外傳、後記時用「+」分開，例如 70+2+1；＋／− 會調整最後一段</div>
         </div>
         <div class="form-section">
             <label class="form-label">發行平台</label>
@@ -281,7 +304,7 @@ function createReviewForm(container, options = {}) {
         const stepBtn = e.target.closest('button[data-step]');
         if (stepBtn) {
             const input = $('[data-field="episode"]');
-            input.value = Math.max(0, (parseInt(input.value) || 0) + parseInt(stepBtn.dataset.step));
+            input.value = stepEpisode(input.value, parseInt(stepBtn.dataset.step));
             changed();
             return;
         }
@@ -312,10 +335,9 @@ function createReviewForm(container, options = {}) {
             const p = el.dataset.link;
             if (state.platforms.includes(p) && el.value.trim()) links[p] = el.value.trim();
         });
-        const episode = parseInt(data.episode);
         return {
             ...data,
-            episode: Number.isInteger(episode) && episode >= 0 ? episode : '',
+            episode: formatEpisode(data.episode),
             links,
             status: state.status,
             updateDay: state.status === DEFAULT_STATUS ? state.updateDay : '',
@@ -336,9 +358,16 @@ function createReviewForm(container, options = {}) {
         markClean();
     }
 
+    // 回傳錯誤訊息，沒問題則回傳空字串
+    function validate() {
+        const ep = $('[data-field="episode"]').value.trim();
+        if (ep && !parseEpisode(ep)) return '話數格式不正確，請輸入數字，外傳、後記用「+」分開，例如 70+2+1';
+        return '';
+    }
+
     function markClean() { cleanSnapshot = JSON.stringify(getData()); }
     function isDirty() { return JSON.stringify(getData()) !== cleanSnapshot; }
 
     setData({});
-    return { getData, setData, isDirty, markClean, focusTitle: () => $('[data-field="title"]').focus() };
+    return { getData, setData, isDirty, markClean, validate, focusTitle: () => $('[data-field="title"]').focus() };
 }

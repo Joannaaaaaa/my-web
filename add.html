@@ -68,6 +68,8 @@
             form.focusTitle();
             return;
         }
+        const error = form.validate();
+        if (error) return alert(error);
         const reviews = Store.loadReviews();
         const now = new Date();
         reviews.push({ ...data, updatedAt: now.toLocaleString(), updatedAtTs: now.getTime() });

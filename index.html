@@ -101,15 +101,12 @@
         .day-item-title { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .day-item-kr { font-size: 0.8rem; color: #8a94a6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .day-item-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; flex-shrink: 0; max-width: 45%; }
-        .read-check {
-            width: 44px; height: 44px; margin: -6px -6px -6px -10px; flex-shrink: 0; border: none; background: none;
-            display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0;
+        .read-pill {
+            min-height: 30px; padding: 0 10px; border-radius: 15px; border: 1px solid #4a4f5a;
+            background: transparent; color: var(--text-muted); font-size: 0.78rem; font-weight: bold; cursor: pointer; position: relative;
         }
-        .read-check span {
-            width: 26px; height: 26px; border-radius: 50%; border: 2px solid #555; color: transparent;
-            display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: bold;
-        }
-        .read-check.on span { background: var(--status-ongoing); border-color: var(--status-ongoing); color: #fff; }
+        .read-pill::after { content: ''; position: absolute; inset: -7px -4px; } /* 放大點擊範圍 */
+        .read-pill.on { background: var(--status-ongoing); border-color: var(--status-ongoing); color: #fff; }
         .day-item.read .day-item-title, .day-item.read .day-item-kr, .day-item.read .ep-badge { opacity: 0.45; }
         .day-item-progress { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 0.8rem; color: var(--text-sub); }
         .ep-plus {
@@ -720,12 +717,13 @@
             const read = isReadThisWeek(r);
             return `
             <div class="day-item ${read ? 'read' : ''}" role="button" tabindex="0" onclick="openDetail(${i})" onkeydown="if (event.key === 'Enter') openDetail(${i})">
-                <button class="read-check ${read ? 'on' : ''}" onclick="event.stopPropagation(); toggleRead(${i})" aria-label="${read ? '標為未讀' : '標為已讀'}" aria-pressed="${read}"><span>✓</span></button>
                 <div class="day-item-dots">${(r.platforms || []).map(p => `<span style="background: ${platformColor(p)}"></span>`).join('')}</div>
                 <div class="day-item-main">
                     <div class="title-line"><div class="day-item-title">${escapeHtml(cleanTitleBrackets(r.title) || '未命名')}</div>${episodeBadgeHtml(r)}</div>
                     ${r.krTitle ? `<div class="day-item-kr">${escapeHtml(r.krTitle)}</div>` : ''}
-                    <div class="day-item-progress">${progressControlsHtml(r, i)}</div>
+                    <div class="day-item-progress">${progressControlsHtml(r, i)}
+                        <button class="read-pill ${read ? 'on' : ''}" onclick="event.stopPropagation(); toggleRead(${i})" aria-pressed="${read}">✓ 已讀</button>
+                    </div>
                 </div>
                 <div class="day-item-links">${platformLinkTagsHtml(r)}</div>
             </div>`;
@@ -815,11 +813,12 @@
 
     // ---------- 閱讀進度 ----------
     function episodeBadgeHtml(r) {
-        return Number.isInteger(r.episode) ? `<span class="ep-badge">${r.episode}話</span>` : '';
+        const ep = formatEpisode(r.episode);
+        return ep ? `<span class="ep-badge">${ep}話</span>` : '';
     }
 
     function progressControlsHtml(r, i) {
-        return Number.isInteger(r.episode)
+        return formatEpisode(r.episode)
             ? `<button class="ep-plus" onclick="event.stopPropagation(); addEpisode(${i})">+1 話</button>`
             : `<button class="ep-plus" onclick="event.stopPropagation(); addEpisode(${i})">記錄話數</button>`;
     }
@@ -828,13 +827,13 @@
     function addEpisode(i) {
         const r = allReviews[i];
         const before = { episode: r.episode, lastReadDate: r.lastReadDate };
-        if (Number.isInteger(r.episode)) {
-            r.episode += 1;
+        if (formatEpisode(r.episode)) {
+            r.episode = stepEpisode(r.episode, 1);
         } else {
-            const input = prompt(`《${cleanTitleBrackets(r.title)}》看到第幾話？`);
-            const n = parseInt(input);
-            if (!Number.isInteger(n) || n < 0) return;
-            r.episode = n;
+            const input = prompt(`《${cleanTitleBrackets(r.title)}》看到第幾話？\n有外傳、後記可以寫成 70+2+1`);
+            if (input === null) return;
+            if (!parseEpisode(input)) return alert('格式不正確，請輸入數字，例如 64 或 70+2+1');
+            r.episode = formatEpisode(input);
         }
         if (r.updateDay) r.lastReadDate = weekDateOf(r.updateDay);
         saveProgress();
@@ -1248,6 +1247,8 @@
     function saveChanges() {
         const data = editForm.getData();
         if (!data.title.trim()) return alert('請輸入漫畫名稱！');
+        const error = editForm.validate();
+        if (error) return alert(error);
         const now = new Date();
         allReviews[currentEditIndex] = { ...allReviews[currentEditIndex], ...data, updatedAt: now.toLocaleString(), updatedAtTs: now.getTime() };
         Store.saveReviews(allReviews);
