@@ -54,6 +54,10 @@
         }
         .review-card:active { background: var(--raised); }
         @media (hover: hover) { .review-card:hover { border-color: var(--primary); } }
+        .review-card { display: flex; gap: 12px; align-items: flex-start; }
+        .card-body { flex: 1; min-width: 0; }
+        .detail-head { display: flex; gap: 14px; align-items: flex-start; }
+        .detail-head-text { flex: 1; min-width: 0; }
         .card-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
         .comic-title { font-size: 1.02rem; font-weight: bold; color: #fff; margin: 0; line-height: 1.35; border-left: 3px solid var(--primary); padding-left: 8px; }
         .comic-kr-title { font-size: 0.8rem; color: #8a94a6; font-style: italic; margin: 2px 0 0 11px; }
@@ -95,8 +99,6 @@
         }
         .day-item:last-child { border-bottom: none; }
         .day-item:active { background: var(--raised); }
-        .day-item-dots { display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; }
-        .day-item-dots span { width: 8px; height: 8px; border-radius: 50%; }
         .day-item-main { flex: 1; min-width: 0; }
         .day-item-title { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .day-item-kr { font-size: 0.8rem; color: #8a94a6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -670,6 +672,8 @@
                 `<div><b>🔗 ${g.label}</b>${escapeHtml(g.matches.map(m => m.title).join('、'))}</div>`).join('');
             return `
                 <article class="review-card" role="button" tabindex="0" onclick="openDetail(${i})" onkeydown="if (event.key === 'Enter') openDetail(${i})">
+                    ${coverHtml(r, coverUrlOf(r), 'md')}
+                    <div class="card-body">
                     <div class="card-top">
                         <div style="min-width:0;">
                             <h3 class="comic-title">${escapeHtml(r.title || '未命名')}${episodeBadgeHtml(r)}</h3>
@@ -681,6 +685,7 @@
                     ${creators ? `<div class="card-creators">${creators}</div>` : ''}
                     ${relations ? `<div class="card-relations">${relations}</div>` : ''}
                     ${dates ? `<div class="card-dates">${dates}</div>` : ''}
+                    </div>
                 </article>`;
         }).join('');
         document.getElementById('emptyMsg').hidden = indexes.length > 0;
@@ -717,7 +722,7 @@
             const read = isReadThisWeek(r);
             return `
             <div class="day-item ${read ? 'read' : ''}" role="button" tabindex="0" onclick="openDetail(${i})" onkeydown="if (event.key === 'Enter') openDetail(${i})">
-                <div class="day-item-dots">${(r.platforms || []).map(p => `<span style="background: ${platformColor(p)}"></span>`).join('')}</div>
+                ${coverHtml(r, coverUrlOf(r), 'sm')}
                 <div class="day-item-main">
                     <div class="title-line"><div class="day-item-title">${escapeHtml(cleanTitleBrackets(r.title) || '未命名')}</div>${episodeBadgeHtml(r)}</div>
                     ${r.krTitle ? `<div class="day-item-kr">${escapeHtml(r.krTitle)}</div>` : ''}
@@ -1150,9 +1155,14 @@
 
         document.getElementById('detailHeaderTitle').textContent = r.title || '未命名';
         document.getElementById('viewModeArea').innerHTML = `
-            <h2 class="detail-title">${escapeHtml(r.title || '未命名')}${episodeBadgeHtml(r)}</h2>
-            ${r.krTitle ? `<div class="detail-kr">원제: ${escapeHtml(r.krTitle)}</div>` : ''}
-            <div class="detail-meta">${statusBadgeHtml(r)} ${openLinks ? '' : platformTagsHtml(r.platforms)}</div>
+            <div class="detail-head">
+                ${coverHtml(r, coverUrlOf(r), 'lg')}
+                <div class="detail-head-text">
+                    <h2 class="detail-title">${escapeHtml(r.title || '未命名')}${episodeBadgeHtml(r)}</h2>
+                    ${r.krTitle ? `<div class="detail-kr">원제: ${escapeHtml(r.krTitle)}</div>` : ''}
+                    <div class="detail-meta">${statusBadgeHtml(r)} ${openLinks ? '' : platformTagsHtml(r.platforms)}</div>
+                </div>
+            </div>
             ${openLinks ? `<div class="open-links">${openLinks}</div>` : ''}
             <div class="detail-progress">${progressControlsHtml(r, index)}</div>
             <div class="detail-stars">${starsText(r.rating)}</div>
@@ -1192,6 +1202,7 @@
             <div class="role-chips">${Object.entries(roleCounts).map(([role, n]) => `<span class="role-chip">${role}<b>${n}</b></span>`).join('')}</div>
             ${works.map(({ r, i, roles }) => `
                 <div class="work-row" role="button" tabindex="0" onclick="openWorkFromCreator(${i})">
+                    ${coverHtml(r, coverUrlOf(r), 'xs')}
                     <div class="work-main">
                         <div class="day-item-title">${escapeHtml(r.title || '未命名')}</div>
                         ${r.krTitle ? `<div class="day-item-kr">${escapeHtml(r.krTitle)}</div>` : ''}
@@ -1252,18 +1263,22 @@
         const error = editForm.validate();
         if (error) return alert(error);
         const now = new Date();
+        const oldCoverId = allReviews[currentEditIndex].coverId;
         allReviews[currentEditIndex] = { ...allReviews[currentEditIndex], ...data, updatedAt: now.toLocaleString(), updatedAtTs: now.getTime() };
         Store.saveReviews(allReviews);
         editForm.markClean();
+        if (oldCoverId && oldCoverId !== data.coverId) CoverStore.delete(oldCoverId).catch(() => {});
         renderAll();
         renderDetailView(currentEditIndex);
         setEditMode(false);
+        if (data.coverId !== oldCoverId) loadCovers();
     }
 
     function deleteCurrentReview() {
         const title = allReviews[currentEditIndex].title || '未命名';
         if (!confirm(`確定要刪除《${title}》的所有紀錄嗎？`)) return;
-        allReviews.splice(currentEditIndex, 1);
+        const [removed] = allReviews.splice(currentEditIndex, 1);
+        if (removed.coverId) CoverStore.delete(removed.coverId).catch(() => {});
         Store.saveReviews(allReviews);
         editForm.markClean();
         setEditMode(false);
@@ -1272,8 +1287,15 @@
     }
 
     // ---------- 備份 / 匯入 / 清除 ----------
-    function downloadBackup() {
-        const packageData = { reviews: allReviews, memo: Store.loadMemo() };
+    async function downloadBackup() {
+        // 封面一起打包成 data URL，匯入時還原
+        const covers = {};
+        for (const r of allReviews) {
+            if (!r.coverId || covers[r.coverId]) continue;
+            const blob = await CoverStore.get(r.coverId).catch(() => null);
+            if (blob) covers[r.coverId] = await blobToDataUrl(blob);
+        }
+        const packageData = { reviews: allReviews, memo: Store.loadMemo(), covers };
         const blob = new Blob([JSON.stringify(packageData, null, 2)], { type: 'application/json' });
         const now = new Date();
         const pad = n => String(n).padStart(2, '0');
@@ -1304,6 +1326,11 @@
                 if (!confirm(`「${file.name}」是完整備份（${count} 部）。\n匯入會取代目前的 ${allReviews.length} 部漫畫與備忘錄，確定嗎？`)) continue;
                 allReviews = imported.reviews || [];
                 Store.saveMemo(imported.memo || '');
+                await CoverStore.clear().catch(() => {});
+                for (const [id, dataUrl] of Object.entries(imported.covers || {})) {
+                    const blob = await (await fetch(dataUrl)).blob();
+                    await CoverStore.put(id, blob).catch(() => {});
+                }
             } else {
                 const added = Array.isArray(imported) ? imported : [imported];
                 allReviews = allReviews.concat(added);
@@ -1317,6 +1344,7 @@
         document.getElementById('memoArea').value = Store.loadMemo();
         Sheets.closeTop();
         renderAll();
+        loadCovers();
     });
 
     function clearAllData() {
@@ -1325,6 +1353,9 @@
         allReviews = [];
         Store.saveReviews(allReviews);
         Store.saveMemo('');
+        CoverStore.clear().catch(() => {});
+        coverUrls.forEach(url => URL.revokeObjectURL(url));
+        coverUrls.clear();
         document.getElementById('memoArea').value = '';
         Sheets.closeTop();
         renderAll();
@@ -1351,9 +1382,34 @@
         renderStats();
     }
 
+    // ---------- 封面快取 ----------
+    const coverUrls = new Map(); // coverId → object URL
+
+    function coverUrlOf(r) {
+        return r.coverId ? coverUrls.get(r.coverId) : null;
+    }
+
+    // 從 IndexedDB 讀出所有封面後重畫；cleanup 時順便刪掉沒有作品在用的圖片
+    async function loadCovers({ cleanup = false } = {}) {
+        let all;
+        try { all = await CoverStore.getAll(); } catch (err) { return; }
+        const used = new Set(allReviews.map(r => r.coverId).filter(Boolean));
+        const draftCover = Store.loadDraft()?.coverId;
+        if (draftCover) used.add(draftCover);
+        coverUrls.forEach(url => URL.revokeObjectURL(url));
+        coverUrls.clear();
+        for (const [id, blob] of all) {
+            if (used.has(id)) coverUrls.set(id, URL.createObjectURL(blob));
+            else if (cleanup) CoverStore.delete(id).catch(() => {});
+        }
+        renderAll();
+        if (currentEditIndex >= 0 && Sheets.stack.includes('detailSheet') && !isEditMode) renderDetailView(currentEditIndex);
+    }
+
     memoArea.value = Store.loadMemo();
     renderAll();
     switchTab(ui.tab);
+    loadCovers({ cleanup: true });
 </script>
 </body>
 </html>

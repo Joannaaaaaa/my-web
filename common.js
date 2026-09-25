@@ -217,6 +217,90 @@ const Store = {
     saveUi(prefs) { localStorage.setItem(STORAGE_KEYS.ui, JSON.stringify(prefs)); },
 };
 
+// ---------- 封面圖 ----------
+// 封面存在 IndexedDB（localStorage 容量不夠放圖片），作品只記 coverId。
+
+const CoverStore = {
+    _db: null,
+    open() {
+        if (!this._db) {
+            this._db = new Promise((resolve, reject) => {
+                const req = indexedDB.open('webtoon_covers', 1);
+                req.onupgradeneeded = () => req.result.createObjectStore('covers');
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+        return this._db;
+    },
+    async _run(mode, fn) {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction('covers', mode);
+            const out = fn(tx.objectStore('covers'));
+            tx.oncomplete = () => resolve(out instanceof IDBRequest ? out.result : out);
+            tx.onerror = () => reject(tx.error);
+        });
+    },
+    get(id) { return this._run('readonly', s => s.get(id)); },
+    put(id, blob) { return this._run('readwrite', s => s.put(blob, id)); },
+    delete(id) { return this._run('readwrite', s => s.delete(id)); },
+    clear() { return this._run('readwrite', s => s.clear()); },
+    getAll() {
+        return this._run('readonly', s => {
+            const map = new Map();
+            s.openCursor().onsuccess = e => {
+                const cursor = e.target.result;
+                if (cursor) { map.set(cursor.key, cursor.value); cursor.continue(); }
+            };
+            return map;
+        });
+    },
+};
+
+const COVER_W = 240, COVER_H = 320; // 3:4 直式，顯示時最大約 96×128，2 倍解析度
+
+// 把使用者選的圖片從中間裁成 3:4 並壓縮成小 JPEG（約 10–30KB）
+async function makeCoverBlob(file) {
+    const url = URL.createObjectURL(file);
+    try {
+        const img = await new Promise((resolve, reject) => {
+            const el = new Image();
+            el.onload = () => resolve(el);
+            el.onerror = () => reject(new Error('無法讀取這張圖片'));
+            el.src = url;
+        });
+        const scale = Math.max(COVER_W / img.naturalWidth, COVER_H / img.naturalHeight);
+        const sw = COVER_W / scale, sh = COVER_H / scale;
+        const canvas = document.createElement('canvas');
+        canvas.width = COVER_W;
+        canvas.height = COVER_H;
+        canvas.getContext('2d').drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh, 0, 0, COVER_W, COVER_H);
+        return await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+    } finally {
+        URL.revokeObjectURL(url);
+    }
+}
+
+function newCoverId() {
+    return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function blobToDataUrl(blob) {
+    return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+    });
+}
+
+// 封面或佔位圖（標題第一個字）；url 由呼叫端提供
+function coverHtml(review, url, size = 'md') {
+    if (url) return `<img class="cover cover-${size}" src="${url}" alt="" loading="lazy">`;
+    const first = Array.from(cleanTitleBrackets(review.title) || '?')[0];
+    return `<div class="cover cover-${size} cover-placeholder" aria-hidden="true">${escapeHtml(first)}</div>`;
+}
+
 // ---------- 漫畫表單元件 ----------
 
 /**
@@ -224,10 +308,18 @@ const Store = {
  * options.onInput：任何欄位改動時呼叫；options.teamOpen：創作團隊區塊預設展開。
  */
 function createReviewForm(container, options = {}) {
-    const state = { status: DEFAULT_STATUS, updateDay: '', platforms: [], rating: 0 };
+    const state = { status: DEFAULT_STATUS, updateDay: '', platforms: [], rating: 0, coverId: '' };
     let cleanSnapshot = '';
 
     container.innerHTML = `
+        <div class="form-section cover-edit">
+            <div data-role="cover-preview"></div>
+            <div class="cover-actions">
+                <label class="btn">🖼 選擇封面<input type="file" accept="image/*" hidden data-role="cover-input"></label>
+                <button type="button" class="btn btn-ghost" data-role="cover-remove" hidden>移除封面</button>
+                <div class="form-hint">會自動從中間裁成直式並壓縮</div>
+            </div>
+        </div>
         <div class="form-section">
             <label class="form-label">漫畫名稱</label>
             <input class="input" data-field="title" placeholder="例如：上流社會">
@@ -333,6 +425,46 @@ function createReviewForm(container, options = {}) {
         options.onInput?.();
     }
 
+    let previewUrl = null;
+    let coverBusy = false; // 壓縮封面中，避免這時按儲存漏掉新封面
+    async function refreshCover() {
+        const id = state.coverId;
+        const blob = id ? await CoverStore.get(id).catch(() => null) : null;
+        if (id !== state.coverId) return; // 讀取期間又換了封面
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        previewUrl = blob ? URL.createObjectURL(blob) : null;
+        $('[data-role="cover-preview"]').innerHTML = coverHtml({ title: $('[data-field="title"]').value }, previewUrl, 'lg');
+        $('[data-role="cover-remove"]').hidden = !id;
+    }
+
+    $('[data-role="cover-input"]').addEventListener('change', async e => {
+        const file = e.target.files[0];
+        e.target.value = '';
+        if (!file) return;
+        coverBusy = true;
+        $('[data-role="cover-preview"]').innerHTML = '<div class="cover cover-lg cover-placeholder">…</div>';
+        try {
+            const blob = await makeCoverBlob(file);
+            const id = newCoverId();
+            await CoverStore.put(id, blob);
+            state.coverId = id;
+            await refreshCover();
+            changed();
+        } catch (err) {
+            alert(`封面儲存失敗：${err.message}`);
+            refreshCover();
+        } finally {
+            coverBusy = false;
+        }
+    });
+    $('[data-role="cover-remove"]').addEventListener('click', () => {
+        state.coverId = '';
+        refreshCover();
+        changed();
+    });
+    // 沒有封面時，佔位圖顯示標題第一個字
+    $('[data-field="title"]').addEventListener('input', () => { if (!state.coverId) refreshCover(); });
+
     container.addEventListener('click', e => {
         const btn = e.target.closest('button[data-value]');
         if (!btn) return;
@@ -375,6 +507,7 @@ function createReviewForm(container, options = {}) {
             returnDate: state.status === '休刊' ? data.returnDate : '',
             platforms: [...state.platforms],
             rating: state.rating,
+            coverId: state.coverId,
         };
     }
 
@@ -387,12 +520,15 @@ function createReviewForm(container, options = {}) {
         state.updateDay = DAY_MAP[data.updateDay] ? data.updateDay : '';
         state.platforms = [...(data.platforms || [])];
         state.rating = Math.max(0, Math.min(5, parseInt(data.rating) || 0));
+        state.coverId = data.coverId || '';
+        refreshCover();
         refreshChips();
         markClean();
     }
 
     // 回傳錯誤訊息，沒問題則回傳空字串
     function validate() {
+        if (coverBusy) return '封面處理中，請稍候再儲存';
         const bad = EPISODE_PARTS.find(({ key }) => {
             const v = $(`[data-ep="${key}"]`).value.trim();
             return v && !/^\d+$/.test(v);

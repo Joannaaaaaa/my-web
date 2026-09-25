@@ -106,6 +106,19 @@ a.tag-link:active { background: rgba(255, 255, 255, 0.08); }
 .star-input button.on { color: var(--star); }
 .form-hint { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
 
+/* 封面 */
+.cover { flex-shrink: 0; object-fit: cover; border-radius: 6px; background: var(--raised); display: block; }
+.cover-placeholder {
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted); font-weight: bold; border: 1px solid var(--border);
+}
+.cover-xs { width: 36px; height: 48px; font-size: 0.9rem; border-radius: 4px; }
+.cover-sm { width: 42px; height: 56px; font-size: 1rem; border-radius: 5px; }
+.cover-md { width: 60px; height: 80px; font-size: 1.3rem; }
+.cover-lg { width: 96px; height: 128px; font-size: 2rem; border-radius: 8px; }
+.cover-edit { display: flex; gap: 14px; align-items: flex-start; }
+.cover-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+
 .team-details { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
 .team-details summary {
     list-style: none; cursor: pointer; padding: 14px 16px; min-height: 48px;
