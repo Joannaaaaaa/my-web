@@ -13,7 +13,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-2">
+    <link rel="stylesheet" href="common.css?v=20260926-3">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -133,6 +133,7 @@
             line-height: 1.5; vertical-align: 0.12em; white-space: nowrap; font-variant-numeric: tabular-nums;
         }
         .detail-title .ep-badge { font-size: 0.95rem; vertical-align: 0.2em; }
+        .backlog-badge { background: rgba(200, 100, 26, 0.2); color: #f0a35e; }
         /* 本週清單標題可換行，話數標籤接在標題後面 */
         .title-line { font-weight: bold; line-height: 1.4; word-break: break-word; }
         .title-line .day-item-title { display: inline; white-space: normal; }
@@ -483,6 +484,7 @@
             <option value="rating">評分（高→低）</option>
             <option value="start">開始日（新→舊）</option>
             <option value="end">結束日（新→舊）</option>
+            <option value="backlog">待補最多</option>
             <option value="title">標題</option>
         </select>
     </div>
@@ -579,7 +581,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260926-2"></script>
+<script src="common.js?v=20260926-3"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added' }, Store.loadUi());
@@ -720,6 +722,7 @@
             'rating': (a, b) => (allReviews[b].rating || 0) - (allReviews[a].rating || 0),
             'start': (a, b) => (allReviews[b].startDate || '').localeCompare(allReviews[a].startDate || ''),
             'end': (a, b) => (allReviews[b].endDate || '').localeCompare(allReviews[a].endDate || ''),
+            'backlog': (a, b) => (backlogOf(allReviews[b]) ?? -1) - (backlogOf(allReviews[a]) ?? -1),
             'title': (a, b) => (allReviews[a].title || '').localeCompare(allReviews[b].title || '', 'zh-Hant'),
         }[ui.sort];
         return by ? indexes.sort(by) : indexes;
@@ -919,6 +922,7 @@
     // 改回連載中，並直接打開編輯讓使用者選更新日
     function resumeSerial(i) {
         const r = allReviews[i];
+        freezeLatest(r); // 從今天開始重新自動 +1，休刊期間不算
         r.status = DEFAULT_STATUS;
         Object.assign(r, { returnText: '', returnFrom: '', returnTo: '' });
         Store.saveReviews(allReviews);
@@ -929,9 +933,12 @@
     }
 
     // ---------- 閱讀進度 ----------
+    // 話數標籤＋待補標籤（例如「52話」「待補 3」）
     function episodeBadgeHtml(r) {
         const label = episodeLabel(r.episode);
-        return label ? `<span class="ep-badge">${label}</span>` : '';
+        const backlog = backlogOf(r);
+        return (label ? `<span class="ep-badge">${label}</span>` : '')
+            + (backlog ? `<span class="ep-badge backlog-badge">待補 ${backlog}</span>` : '');
     }
 
     function progressControlsHtml(r, i) {
@@ -945,7 +952,7 @@
     // 看完一話：話數 +1，並把本週這部標為已讀
     function addEpisode(i) {
         const r = allReviews[i];
-        const before = { episode: r.episode && typeof r.episode === 'object' ? { ...r.episode } : r.episode, lastReadDate: r.lastReadDate };
+        const before = { episode: r.episode && typeof r.episode === 'object' ? { ...r.episode } : r.episode, lastReadDate: r.lastReadDate, latest: r.latest };
         if (episodeLabel(r.episode)) {
             r.episode = stepEpisode(r.episode, 1);
         } else {
@@ -955,6 +962,11 @@
             r.episode = { main: parseInt(input) };
         }
         if (r.updateDay) r.lastReadDate = weekDateOf(r.updateDay);
+        // 看的進度超過記錄的最新話數 → 最新話數跟著更新
+        const latest = latestEpisode(r), ep = normalizeEpisode(r.episode);
+        if (latest && ep && latest.part === currentEpisodePart(ep).key && ep[latest.part] > latest.n) {
+            r.latest = { n: ep[latest.part], part: latest.part, asOf: toDateStr(new Date()) };
+        }
         saveProgress();
         showToast(`《${cleanTitleBrackets(r.title)}》${episodeText(r)}`, () => {
             Object.assign(r, before);

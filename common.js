@@ -250,6 +250,48 @@ function returnRangeLabel(from, to) {
     return from === to ? fmt(from, true) : `${fmt(from)}～${fmt(to)}`;
 }
 
+// ---------- 最新話數／待補 ----------
+// latest = { n: 52, part: 'main', asOf: '2026-09-26' }：asOf 那天平台最新是第 n 話。
+// 連載中的作品，asOf 之後每經過一次更新日就自動 +1（即時算，不改資料）；休刊或延更時使用者手動修正。
+
+// fromStr（不含）到 toDate（含）之間，有幾個指定的星期幾
+function countWeekdaysAfter(fromStr, toDate, day) {
+    const idx = DAYS.indexOf(day);
+    if (idx < 0 || !fromStr) return 0;
+    const [y, m, d] = fromStr.split('-').map(Number);
+    const start = new Date(y, m - 1, d);
+    const end = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate());
+    const diff = Math.round((end - start) / 864e5);
+    if (diff <= 0) return 0;
+    const target = (idx + 1) % 7; // DAYS 從週一開始，getDay() 週日是 0
+    let count = Math.floor(diff / 7);
+    for (let k = 1; k <= diff % 7; k++) if ((start.getDay() + k) % 7 === target) count++;
+    return count;
+}
+
+function latestEpisode(review, today = new Date()) {
+    const l = review.latest;
+    if (!l || !Number.isInteger(l.n)) return null;
+    const auto = (review.status || DEFAULT_STATUS) === DEFAULT_STATUS && review.updateDay ? countWeekdaysAfter(l.asOf, today, review.updateDay) : 0;
+    return { n: l.n + auto, part: l.part || 'main' };
+}
+
+// 待補 = 最新話數 − 看到的話數（同一段才算）；無法計算時回傳 null
+function backlogOf(review) {
+    const latest = latestEpisode(review);
+    const ep = normalizeEpisode(review.episode);
+    if (!latest || !ep) return null;
+    const part = currentEpisodePart(ep).key;
+    if (part !== latest.part) return null;
+    return Math.max(0, latest.n - (ep[part] ?? 0));
+}
+
+// 把自動 +1 的結果固定下來（改狀態、改更新日前呼叫，避免休刊期間也被算進去）
+function freezeLatest(review) {
+    const latest = latestEpisode(review);
+    if (latest) review.latest = { n: latest.n, part: latest.part, asOf: toDateStr(new Date()) };
+}
+
 function episodeText(review) {
     const label = episodeLabel(review.episode);
     return label ? `看到 ${label}` : '';
@@ -629,6 +671,11 @@ function createReviewForm(container, options = {}) {
             <div class="form-hint">有才填；「+1 話」會加在最後一個有填的欄位</div>
         </div>
         <div class="form-section">
+            <label class="form-label">平台最新話數</label>
+            <input class="input" type="text" inputmode="numeric" autocomplete="off" data-role="latest" placeholder="—" style="max-width: 160px; text-align: center;">
+            <div class="form-hint" data-role="latest-hint">填了就會顯示「待補 N 話」；連載中會在每週更新日自動 +1，休刊或延更再手動修正</div>
+        </div>
+        <div class="form-section">
             <label class="form-label">發行平台</label>
             <div class="chip-group" data-group="platform">
                 ${PLATFORMS.map(p => `<button type="button" class="chip" data-value="${p}" style="--opt-color: ${platformColor(p)}">${p}</button>`).join('')}
@@ -773,8 +820,13 @@ function createReviewForm(container, options = {}) {
             const n = parseInt(el.value);
             if (/^\d+$/.test(el.value.trim()) && n >= 0) episode[el.dataset.ep] = n;
         });
+        // 最新話數：表單顯示的是「目前」最新（含自動 +1），存檔時以今天為基準固定下來
+        const latestRaw = $('[data-role="latest"]').value.trim();
+        const latestPart = currentEpisodePart(episode).key;
+        const latest = /^\d+$/.test(latestRaw) ? { n: Number(latestRaw), part: latestPart, asOf: toDateStr(new Date()) } : '';
         return {
             ...data,
+            latest,
             episode: Object.keys(episode).length ? episode : '',
             links,
             status: state.status,
@@ -795,6 +847,7 @@ function createReviewForm(container, options = {}) {
         container.querySelectorAll('[data-link]').forEach(el => { el.value = (data.links || {})[el.dataset.link] || ''; });
         const ep = normalizeEpisode(data.episode) || {};
         container.querySelectorAll('[data-ep]').forEach(el => { el.value = ep[el.dataset.ep] ?? ''; });
+        $('[data-role="latest"]').value = latestEpisode(data)?.n ?? '';
         state.status = STATUS_CONFIG[data.status] ? data.status : DEFAULT_STATUS;
         state.updateDay = DAY_MAP[data.updateDay] ? data.updateDay : '';
         state.platforms = [...(data.platforms || [])];
@@ -808,6 +861,8 @@ function createReviewForm(container, options = {}) {
     // 回傳錯誤訊息，沒問題則回傳空字串
     function validate() {
         if (coverBusy) return '封面處理中，請稍候再儲存';
+        const latestRaw = $('[data-role="latest"]').value.trim();
+        if (latestRaw && !/^\d+$/.test(latestRaw)) return '「平台最新話數」只能填數字';
         const bad = EPISODE_PARTS.find(({ key }) => {
             const v = $(`[data-ep="${key}"]`).value.trim();
             return v && !/^\d+$/.test(v);
