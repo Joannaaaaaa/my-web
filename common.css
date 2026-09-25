@@ -39,6 +39,7 @@ button { font-family: inherit; }
     text-decoration: none;
 }
 .btn:active { opacity: 0.8; }
+.btn:disabled { opacity: 0.45; cursor: default; }
 .btn-primary { background: var(--primary); }
 .btn-danger { background: #c0392b; }
 .btn-ghost { background: transparent; color: var(--text-sub); }

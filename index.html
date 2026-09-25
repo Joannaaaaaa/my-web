@@ -13,7 +13,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260925-2">
+    <link rel="stylesheet" href="common.css?v=20260926-1">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -144,6 +144,7 @@
             box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5); font-size: 0.9rem; animation: slideUp 0.2s ease-out;
         }
         .toast span { flex: 1; }
+        .toast button + button { padding-left: 4px; }
         .toast button { min-height: 40px; padding: 0 12px; border: none; background: none; color: var(--primary); font-weight: bold; font-size: 0.9rem; cursor: pointer; }
         .return-banner {
             display: flex; align-items: center; gap: 8px; max-width: 1000px; margin: 4px auto 0; padding: 0 16px;
@@ -315,6 +316,30 @@
         .detail-progress { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 0.95rem; }
         .detail-stars { color: var(--star); font-size: 1.3rem; letter-spacing: 1px; }
         .detail-dates { display: flex; gap: 16px; font-size: 0.85rem; margin-bottom: 12px; }
+        .item-note { font-size: 0.78rem; color: #c9b27a; margin-top: 2px; }
+        .card-note { margin: 2px 0 0 11px; }
+        .notes-head { display: flex; justify-content: space-between; align-items: center; margin: 20px 0 8px; }
+        .notes-head .detail-section-title { margin: 0; }
+        .notes-add { min-height: 36px; padding: 0 12px; font-size: 0.85rem; }
+        .note-list { border-left: 2px solid var(--border); margin-left: 6px; }
+        .note-item {
+            position: relative; padding: 4px 4px 12px 16px; cursor: pointer; border-radius: 0 8px 8px 0;
+        }
+        .note-item:active { background: var(--raised); }
+        .note-item::before { content: ''; position: absolute; left: -6px; top: 9px; width: 10px; height: 10px; border-radius: 50%; background: var(--primary); border: 2px solid var(--bg); }
+        .note-meta { display: flex; gap: 6px; align-items: center; font-size: 0.78rem; color: var(--text-muted); margin-bottom: 2px; }
+        .note-meta .ep-badge { margin-left: 0; font-size: 0.72rem; }
+        .note-text { font-size: 0.95rem; line-height: 1.65; white-space: pre-wrap; word-break: break-word; color: var(--text-sub); }
+        .note-empty { color: #555; font-size: 0.88rem; padding: 4px 0 4px 16px; }
+        .cleanup-item { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+        .cleanup-item label.cleanup-title { display: flex; gap: 10px; align-items: flex-start; font-weight: bold; cursor: pointer; }
+        .cleanup-item input[type="checkbox"] { width: 20px; height: 20px; margin: 2px 0 0; flex-shrink: 0; accent-color: var(--primary); }
+        .cleanup-rows { margin: 8px 0 0 30px; font-size: 0.85rem; color: var(--text-sub); display: grid; gap: 4px; }
+        .cleanup-rows .k { color: var(--text-muted); margin-right: 6px; }
+        .cleanup-rows .old { color: var(--text-muted); text-decoration: line-through; }
+        .cleanup-flag { color: #e6b450; }
+        .cleanup-notes { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+        .cleanup-notes li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .comment-text { font-size: 1rem; color: var(--text-sub); line-height: 1.7; white-space: pre-wrap; word-break: break-word; background: var(--raised); padding: 12px 14px; border-radius: 10px; }
         .detail-section-title { font-size: 0.85rem; color: var(--text-muted); font-weight: bold; margin: 20px 0 8px; }
         .creator-list { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 0.92rem; }
@@ -429,12 +454,13 @@
 </nav>
 
 <div class="backdrop" id="backdrop" onclick="Sheets.closeTop()"></div>
-<div class="toast" id="toast" hidden><span id="toastText"></span><button id="toastAction">復原</button></div>
+<div class="toast" id="toast" hidden><span id="toastText"></span><button id="toastExtra" hidden></button><button id="toastAction">復原</button></div>
 
 <!-- 更多功能選單 -->
 <div class="sheet" id="menuSheet">
     <div class="sheet-handle"></div>
     <button class="menu-item" onclick="downloadBackup()">💾 下載備份</button>
+    <button class="menu-item" onclick="openCleanup()">🧹 整理舊資料</button>
     <button class="menu-item" onclick="document.getElementById('filePicker').click()">📤 匯入備份</button>
     <a class="menu-item" href="platform-comments.html">💬 查詢平台留言</a>
     <div class="menu-divider"></div>
@@ -472,6 +498,58 @@
     </div>
 </div>
 
+<!-- 整理舊資料 -->
+<div class="fullsheet" id="cleanupSheet">
+    <div class="fullsheet-header">
+        <button class="icon-btn" onclick="Sheets.closeTop()" aria-label="關閉">✕</button>
+        <div class="sheet-title">整理舊資料</div>
+        <button class="btn btn-ghost" style="min-height:38px;" onclick="toggleAllCleanup()">全選／全不選</button>
+    </div>
+    <div class="fullsheet-body" id="cleanupBody"></div>
+    <div class="fullsheet-footer">
+        <button class="btn btn-primary" style="flex:1;" id="cleanupApply" onclick="applyCleanup()">套用</button>
+    </div>
+</div>
+
+<!-- 閱讀筆記 -->
+<div class="sheet" id="noteSheet">
+    <div class="sheet-handle"></div>
+    <h3 id="noteSheetTitle">新增筆記</h3>
+    <div class="form-row form-section">
+        <div>
+            <label class="form-label" for="noteDate">日期</label>
+            <input class="input" type="date" id="noteDate">
+        </div>
+        <div>
+            <label class="form-label" for="notePart">段落</label>
+            <select class="input" id="notePart">
+                <option value="main">本篇</option>
+                <option value="side">外傳</option>
+                <option value="after">後記</option>
+            </select>
+        </div>
+    </div>
+    <div class="form-row form-section">
+        <div>
+            <label class="form-label" for="noteFrom">從第幾話</label>
+            <input class="input" type="text" inputmode="numeric" id="noteFrom" placeholder="—">
+        </div>
+        <div>
+            <label class="form-label" for="noteTo">到第幾話（選填）</label>
+            <input class="input" type="text" inputmode="numeric" id="noteTo" placeholder="—">
+        </div>
+    </div>
+    <div class="form-section">
+        <label class="form-label" for="noteText">心得</label>
+        <textarea class="input" id="noteText" rows="5" placeholder="這幾話的心得…"></textarea>
+    </div>
+    <div style="display:flex; gap:10px;">
+        <button class="btn btn-ghost" id="noteDelete" style="color: var(--danger);" onclick="deleteNote()">刪除</button>
+        <button class="btn" style="flex:1;" onclick="Sheets.closeTop()">取消</button>
+        <button class="btn btn-primary" style="flex:2;" onclick="saveNote()">儲存</button>
+    </div>
+</div>
+
 <!-- 創作者頁 -->
 <div class="fullsheet" id="creatorSheet">
     <div class="fullsheet-header">
@@ -499,7 +577,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260925-2"></script>
+<script src="common.js?v=20260926-1"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added' }, Store.loadUi());
@@ -620,7 +698,7 @@
         input.focus();
     }
 
-    const SEARCH_FIELDS = ['title', 'krTitle', 'comment', ...JOB_KEYS.map(j => j.key)];
+    const SEARCH_FIELDS = ['title', 'krTitle', 'note', 'comment', ...JOB_KEYS.map(j => j.key)];
 
     function getFilteredIndexes() {
         const query = document.getElementById('searchInput').value.toLowerCase().trim();
@@ -629,7 +707,8 @@
             if (ui.status !== 'all' && (r.status || DEFAULT_STATUS) !== ui.status) return false;
             if (ui.platform !== 'all' && !(r.platforms || []).includes(ui.platform)) return false;
             if (ui.studio !== 'all' && !splitNames(r.studio).includes(ui.studio)) return false;
-            if (query && !SEARCH_FIELDS.some(f => (r[f] || '').toLowerCase().includes(query))) return false;
+            if (query && !SEARCH_FIELDS.some(f => String(r[f] || '').toLowerCase().includes(query))
+                && !(r.notes || []).some(n => (n.text || '').toLowerCase().includes(query))) return false;
             return true;
         });
 
@@ -687,6 +766,7 @@
                         <div style="min-width:0;">
                             <h3 class="comic-title">${escapeHtml(r.title || '未命名')}${episodeBadgeHtml(r)}</h3>
                             ${r.krTitle ? `<div class="comic-kr-title">${escapeHtml(r.krTitle)}</div>` : ''}
+                            ${r.note ? `<div class="item-note card-note">📌 ${escapeHtml(r.note)}</div>` : ''}
                         </div>
                         <div class="card-stars">${starsText(r.rating)}</div>
                     </div>
@@ -735,6 +815,7 @@
                 <div class="day-item-main">
                     <div class="title-line"><div class="day-item-title">${escapeHtml(cleanTitleBrackets(r.title) || '未命名')}</div>${episodeBadgeHtml(r)}</div>
                     ${r.krTitle ? `<div class="day-item-kr">${escapeHtml(r.krTitle)}</div>` : ''}
+                    ${r.note ? `<div class="item-note">📌 ${escapeHtml(r.note)}</div>` : ''}
                     <div class="day-item-progress">${progressControlsHtml(r, i)}
                         <button class="read-pill ${read ? 'on' : ''}" onclick="event.stopPropagation(); toggleRead(${i})" aria-pressed="${read}">✓ 已讀</button>
                     </div>
@@ -856,7 +937,7 @@
         showToast(`《${cleanTitleBrackets(r.title)}》${episodeText(r)}`, () => {
             Object.assign(r, before);
             saveProgress();
-        });
+        }, { label: '寫心得', fn: () => openNoteEditor(i) });
     }
 
     function toggleRead(i) {
@@ -876,15 +957,22 @@
     }
 
     let toastTimer;
-    function showToast(text, undo) {
+    // extra = { label, fn }：額外的按鈕，例如「寫心得」
+    function showToast(text, undo, extra) {
         const toast = document.getElementById('toast');
         document.getElementById('toastText').textContent = text;
         const action = document.getElementById('toastAction');
         action.hidden = !undo;
         action.onclick = () => { toast.hidden = true; undo(); };
+        const extraBtn = document.getElementById('toastExtra');
+        extraBtn.hidden = !extra;
+        if (extra) {
+            extraBtn.textContent = extra.label;
+            extraBtn.onclick = () => { toast.hidden = true; extra.fn(); };
+        }
         toast.hidden = false;
         clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => { toast.hidden = true; }, 4000);
+        toastTimer = setTimeout(() => { toast.hidden = true; }, extra ? 6000 : 4000);
     }
 
     function selectDay(day) {
@@ -1170,6 +1258,7 @@
                 <div class="detail-head-text">
                     <h2 class="detail-title">${escapeHtml(r.title || '未命名')}${episodeBadgeHtml(r)}</h2>
                     ${r.krTitle ? `<div class="detail-kr">원제: ${escapeHtml(r.krTitle)}</div>` : ''}
+                    ${r.note ? `<div class="item-note" style="font-size:0.85rem;">📌 ${escapeHtml(r.note)}</div>` : ''}
                     <div class="detail-meta">${statusBadgeHtml(r)} ${openLinks ? '' : platformTagsHtml(r.platforms)}</div>
                     ${openLinks ? `<div class="open-links">${openLinks}</div>` : ''}
                     <div class="detail-progress">${progressControlsHtml(r, index)}</div>
@@ -1181,10 +1270,185 @@
                 ${r.endDate ? `<span style="color:#e74c3c;">끝 ${escapeHtml(r.endDate)}</span>` : ''}
             </div>` : ''}
             ${r.comment ? `<div class="comment-text">${escapeHtml(r.comment)}</div>` : ''}
+            <div class="notes-head">
+                <div class="detail-section-title">閱讀筆記${(r.notes || []).length ? `（${r.notes.length}）` : ''}</div>
+                <button class="btn notes-add" onclick="openNoteEditor(${index})">＋ 筆記</button>
+            </div>
+            ${notesTimelineHtml(r, index)}
             <div class="detail-section-title">創作團隊</div>
             ${creators ? `<dl class="creator-list">${creators}</dl>` : '<div style="color:#555;">未填寫創作者資訊</div>'}
             ${relations ? `<div class="detail-section-title">合作過的其他作品</div>${relations}` : ''}
         `;
+    }
+
+    // ---------- 閱讀筆記 ----------
+    function notesTimelineHtml(r, index) {
+        const notes = r.notes || [];
+        if (!notes.length) return '<div class="note-empty">還沒有筆記，看完幾話後按「＋ 筆記」記下心得</div>';
+        return `<div class="note-list">${notes.map((n, k) => {
+            const ep = noteEpisodeLabel(n);
+            return `
+                <div class="note-item" role="button" tabindex="0" onclick="openNoteEditor(${index}, ${k})">
+                    <div class="note-meta">${n.date ? `<span>${noteDateLabel(n)}</span>` : '<span>沒有日期</span>'}${ep ? `<span class="ep-badge">${escapeHtml(ep)}</span>` : ''}</div>
+                    ${n.text ? `<div class="note-text">${escapeHtml(n.text)}</div>` : ''}
+                </div>`;
+        }).join('')}</div>`;
+    }
+
+    let noteTarget = null; // { index, noteIndex }
+
+    // 新增時自動帶入今天日期與目前看到的段落／話數
+    function openNoteEditor(index, noteIndex = null) {
+        const r = allReviews[index];
+        noteTarget = { index, noteIndex };
+        let n = noteIndex != null ? r.notes[noteIndex] : null;
+        if (!n) {
+            const part = currentEpisodePart(r.episode);
+            const ep = normalizeEpisode(r.episode) || {};
+            n = { date: toDateStr(new Date()), part: part.key, from: ep[part.key] ?? null, to: null, text: '' };
+        }
+        document.getElementById('noteSheetTitle').textContent = `${noteIndex != null ? '編輯' : '新增'}筆記・${cleanTitleBrackets(r.title)}`;
+        document.getElementById('noteDate').value = n.date || '';
+        document.getElementById('notePart').value = n.part || 'main';
+        document.getElementById('noteFrom').value = n.from ?? '';
+        document.getElementById('noteTo').value = n.toEnd ? '' : (n.to ?? '');
+        document.getElementById('noteText').value = n.text || '';
+        document.getElementById('noteDelete').hidden = noteIndex == null;
+        Sheets.open('noteSheet');
+        setTimeout(() => document.getElementById('noteText').focus(), 250);
+    }
+
+    function readEpisodeInput(id) {
+        const v = document.getElementById(id).value.trim();
+        return /^\d+$/.test(v) ? Number(v) : null;
+    }
+
+    function saveNote() {
+        const r = allReviews[noteTarget.index];
+        const old = noteTarget.noteIndex != null ? r.notes[noteTarget.noteIndex] : {};
+        const toRaw = document.getElementById('noteTo').value.trim();
+        const note = {
+            date: document.getElementById('noteDate').value,
+            part: document.getElementById('notePart').value,
+            from: readEpisodeInput('noteFrom'),
+            to: readEpisodeInput('noteTo'),
+            toEnd: toRaw === '' ? !!old.toEnd && old.from === readEpisodeInput('noteFrom') : false,
+            text: document.getElementById('noteText').value.trim(),
+        };
+        if (!note.text && note.from == null) return alert('請輸入心得或話數');
+        r.notes = [...(r.notes || [])];
+        if (noteTarget.noteIndex != null) r.notes[noteTarget.noteIndex] = note;
+        else r.notes.push(note);
+        // 依日期排序，同一天維持輸入順序
+        r.notes = r.notes.map((n, k) => ({ n, k })).sort((a, b) => (a.n.date || '').localeCompare(b.n.date || '') || a.k - b.k).map(x => x.n);
+        Store.saveReviews(allReviews);
+        Sheets.closeTop();
+        renderList();
+        if (Sheets.stack.includes('detailSheet') && currentEditIndex === noteTarget.index) renderDetailView(noteTarget.index);
+    }
+
+    function deleteNote() {
+        if (!confirm('刪除這則筆記？')) return;
+        const r = allReviews[noteTarget.index];
+        r.notes = r.notes.filter((_, k) => k !== noteTarget.noteIndex);
+        Store.saveReviews(allReviews);
+        Sheets.closeTop();
+        if (Sheets.stack.includes('detailSheet')) renderDetailView(noteTarget.index);
+    }
+
+    // ---------- 整理舊資料 ----------
+    let cleanupPlan = [];
+
+    // 找出標題有括號、或心得裡有日期段落的作品，算出整理後的樣子（還不寫入）
+    function buildCleanupPlan() {
+        const year = new Date().getFullYear();
+        return allReviews.map((r, index) => {
+            const t = parseTitleExtras(r, year);
+            const c = parseCommentNotes(r);
+            if (!t && !c) return null;
+            const flags = [...(t?.flags || []), ...(c?.flags || [])];
+            const next = {};
+            if (t) {
+                next.title = t.title;
+                if (t.episode) {
+                    if (normalizeEpisode(r.episode)) flags.push(`標題括號裡的話數（${episodeLabel(t.episode)}）與現有話數不同時，保留現有的 ${episodeLabel(r.episode)}`);
+                    else next.episode = t.episode;
+                }
+                if (t.note) next.note = [r.note, t.note].filter(Boolean).join('・');
+                if (t.returnDate && !r.returnDate) next.returnDate = t.returnDate;
+            }
+            if (c) {
+                next.comment = c.comment;
+                next.notes = [...(r.notes || []), ...c.notes];
+            }
+            return { index, next, flags, addedNotes: c?.notes || [] };
+        }).filter(Boolean);
+    }
+
+    function openCleanup() {
+        cleanupPlan = buildCleanupPlan();
+        const body = document.getElementById('cleanupBody');
+        if (!cleanupPlan.length) {
+            body.innerHTML = '<div class="empty-msg">沒有需要整理的資料 🎉</div>';
+        } else {
+            body.innerHTML = `
+                <p style="color: var(--text-sub); font-size: 0.88rem; margin: 0 0 12px;">
+                    找到 ${cleanupPlan.length} 部可以整理。取消勾選的作品不會變動。<br>
+                    套用前會先自動下載一份「整理前備份」，不滿意可以隨時匯入還原。
+                </p>
+                ${cleanupPlan.map((p, k) => {
+                    const r = allReviews[p.index];
+                    const n = p.next;
+                    const rows = [];
+                    if (n.title !== undefined && n.title !== r.title) rows.push(`<div><span class="k">標題</span><span class="old">${escapeHtml(r.title)}</span> → ${escapeHtml(n.title)}</div>`);
+                    if (n.episode) rows.push(`<div><span class="k">話數</span>${escapeHtml(episodeLabel(n.episode))}</div>`);
+                    if (n.note) rows.push(`<div><span class="k">備註</span>${escapeHtml(n.note)}</div>`);
+                    if (n.returnDate) rows.push(`<div><span class="k">回歸日</span>${escapeHtml(n.returnDate)}</div>`);
+                    if (p.addedNotes.length) {
+                        rows.push(`<div><span class="k">總評</span>${n.comment ? escapeHtml(n.comment.slice(0, 30)) + (n.comment.length > 30 ? '…' : '') : '（沒有）'}</div>`);
+                        rows.push(`<div><span class="k">筆記 ${p.addedNotes.length} 則</span><ul class="cleanup-notes">${p.addedNotes.map(x =>
+                            `<li>${noteDateLabel(x)} ${escapeHtml(noteEpisodeLabel(x) || '')}｜${escapeHtml((x.text || '').slice(0, 24))}</li>`).join('')}</ul></div>`);
+                    }
+                    p.flags.forEach(f => rows.push(`<div class="cleanup-flag">⚠️ ${escapeHtml(f)}</div>`));
+                    return `
+                        <div class="cleanup-item">
+                            <label class="cleanup-title"><input type="checkbox" data-plan="${k}" checked onchange="updateCleanupButton()">${escapeHtml(r.title)}</label>
+                            <div class="cleanup-rows">${rows.join('')}</div>
+                        </div>`;
+                }).join('')}`;
+        }
+        updateCleanupButton();
+        document.getElementById('cleanupBody').scrollTop = 0;
+        Sheets.open('cleanupSheet');
+    }
+
+    function checkedCleanupItems() {
+        return Array.from(document.querySelectorAll('#cleanupBody input[data-plan]:checked')).map(el => cleanupPlan[el.dataset.plan]);
+    }
+
+    function updateCleanupButton() {
+        const n = checkedCleanupItems().length;
+        const btn = document.getElementById('cleanupApply');
+        btn.disabled = n === 0;
+        btn.textContent = n ? `下載整理前備份並套用（${n} 部）` : '沒有勾選的作品';
+    }
+
+    function toggleAllCleanup() {
+        const boxes = document.querySelectorAll('#cleanupBody input[data-plan]');
+        const allOn = Array.from(boxes).every(b => b.checked);
+        boxes.forEach(b => { b.checked = !allOn; });
+        updateCleanupButton();
+    }
+
+    async function applyCleanup() {
+        const items = checkedCleanupItems();
+        if (!items.length) return;
+        await downloadBackup('before_cleanup');
+        items.forEach(p => { allReviews[p.index] = { ...allReviews[p.index], ...p.next }; });
+        Store.saveReviews(allReviews);
+        Sheets.closeTop();
+        renderAll();
+        showToast(`已整理 ${items.length} 部作品，整理前備份已下載`);
     }
 
     // ---------- 創作者頁 ----------
@@ -1297,7 +1561,7 @@
     }
 
     // ---------- 備份 / 匯入 / 清除 ----------
-    async function downloadBackup() {
+    async function downloadBackup(suffix = '') {
         // 封面一起打包成 data URL，匯入時還原
         const covers = {};
         for (const r of allReviews) {
@@ -1312,7 +1576,7 @@
         const timeStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `comic_reviews_all_backup_${timeStr}.json`;
+        a.download = `comic_reviews_all_backup_${timeStr}${suffix ? '_' + suffix : ''}.json`;
         document.body.appendChild(a);
         a.click();
         a.remove();

@@ -164,6 +164,159 @@ function episodeText(review) {
     return label ? `看到 ${label}` : '';
 }
 
+// ---------- 閱讀筆記 ----------
+// notes = [{ date: '2026-06-16', part: 'main'|'side'|'after', from: 40, to: 41, toEnd: false, text }]
+// from/to 皆可為 null；toEnd = 範圍到「最後」
+
+function noteEpisodeLabel(note) {
+    const range = note.from == null ? ''
+        : note.toEnd ? `${note.from}～最後`
+        : note.to != null && note.to !== note.from ? `${note.from}–${note.to}` : `${note.from}`;
+    if (note.part === 'side') return `外傳${range}`;
+    if (note.part === 'after') return `後記${range}`;
+    if (note.toEnd) return `${note.from}話～最後`;
+    return range ? `${range}話` : '';
+}
+
+function noteDateLabel(note) {
+    if (!note.date) return '';
+    const [, m, d] = note.date.split('-').map(Number);
+    return `${m}/${d}`;
+}
+
+// ---------- 整理舊資料：標題括號、心得裡的日期 ----------
+
+// 標題：「以為只是普通穿越（100+15+後記）」「TOY DADDY（40+後記）10/14」「無法逃離的黑暗（105）找不到外傳」
+// 回傳 { title, episode, note, returnDate, flags } 或 null（沒有括號）
+function parseTitleExtras(review, year = new Date().getFullYear()) {
+    const m = (review.title || '').match(/^(.*?)\s*[（(]([^（()）]*)[)）](.*)$/);
+    if (!m || !m[1].trim()) return null;
+    const inner = m[2].trim(), trailing = m[3].trim();
+    const result = { title: m[1].trim(), episode: null, note: '', returnDate: '', flags: [] };
+    const notes = [];
+
+    // 話數：70、70+2、100+15+後記；「後記還沒看」「後記還沒有翻譯」代表還沒讀，不算
+    const ep = inner.match(/^(\d+)((?:\s*[+＋]\s*(?:\d+|後記(?!還沒|未)))*)/);
+    if (ep) {
+        const parts = [ep[1], ...(ep[2].match(/\d+|後記/g) || [])];
+        const episode = { main: Number(parts[0]) };
+        if (parts[1] === '後記') episode.after = 1;
+        else if (parts[1]) episode.side = Number(parts[1]);
+        if (parts[2]) {
+            episode.after = parts[2] === '後記' ? 1 : Number(parts[2]);
+            if (parts[2] !== '後記') result.flags.push(`第三個數字 ${parts[2]} 當成後記，如果是特別外傳請之後手動修改`);
+        }
+        if (parts.length > 3) result.flags.push('超過三段的話數只取前三段');
+        result.episode = episode;
+        const rest = inner.slice(ep[0].length).replace(/^\s*[+＋]?\s*/, '').trim();
+        if (rest) notes.push(rest);
+    } else if (inner) {
+        notes.push(inner);
+    }
+    if (trailing) notes.push(trailing);
+
+    // 休刊作品的「7/19回歸」「10/14」→ 回歸日
+    if (review.status === '休刊') {
+        for (let k = notes.length - 1; k >= 0; k--) {
+            const d = notes[k].match(/^(\d{1,2})\/(\d{1,2})\s*(?:回歸)?$/);
+            if (d && Number(d[1]) >= 1 && Number(d[1]) <= 12 && Number(d[2]) >= 1 && Number(d[2]) <= 31) {
+                result.returnDate = `${year}-${String(d[1]).padStart(2, '0')}-${String(d[2]).padStart(2, '0')}`;
+                notes.splice(k, 1);
+            }
+        }
+    }
+    result.note = notes.join('・');
+    if (/\d/.test(result.note)) result.flags.push('備註裡有數字，請確認話數是否正確');
+    return result;
+}
+
+const CN_DIGITS = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+function chineseNumber(text) {
+    if (/^\d+$/.test(text)) return Number(text);
+    // 支援到九十九：四、十二、二十、二十一
+    const m = text.match(/^([一二三四五六七八九])?(十)?([一二三四五六七八九])?$/);
+    if (!m || (!m[1] && !m[2] && !m[3])) return null;
+    if (!m[2]) return CN_DIGITS[m[1]];
+    return (m[1] ? CN_DIGITS[m[1]] : 1) * 10 + (m[3] ? CN_DIGITS[m[3]] : 0);
+}
+
+const EP_PART_WORDS = { '特別外傳': 'side', '外傳': 'side', '番外': 'side', '後記': 'after' };
+const NOT_EPISODE_AFTER = '(?![\\d週個天年月次部萬%點號.:/])'; // 「6週沒看」「3個禮拜」不是話數
+
+// 日期後面的話數：「 - 40」「 31-38」「48 49話」「 - 特別外傳1~3」「 - 後記」「133-最後」
+function parseNoteHeader(text, pos) {
+    const re = new RegExp(
+        `\\s*(?:[-–]\\s*)?(?:來補|補個|補完|補)?\\s*(?:(特別外傳|外傳|番外|後記)\\s*)?` +
+        `(?:(\\d{1,4}|最後)${NOT_EPISODE_AFTER}(?:\\s*(?:[-~～、,，]\\s*|\\s+)(\\d{1,4}|最後)${NOT_EPISODE_AFTER})?\\s*(?:話|集)?)?\\s*[)）]?`, 'y');
+    re.lastIndex = pos;
+    const m = re.exec(text);
+    const note = { part: EP_PART_WORDS[m[1]] || 'main', from: null, to: null, toEnd: false };
+    if (m[2] && m[2] !== '最後') note.from = Number(m[2]);
+    if (m[3] === '最後') note.toEnd = true;
+    else if (m[3]) note.to = Number(m[3]);
+    return { note, end: re.lastIndex };
+}
+
+// 同一天裡又分「3話 …」「第四集 …」的，拆成多則（只在空白之後、且後面接空白才算）
+function splitSubNotes(base, text) {
+    const re = /(^|\s)(?:第\s*)?([一二三四五六七八九十]+|\d{1,3})\s*(?:話|集)(?=\s)/g;
+    const cuts = [];
+    let m;
+    while ((m = re.exec(text))) {
+        const n = chineseNumber(m[2]);
+        if (n != null) cuts.push({ start: m.index + m[1].length, end: re.lastIndex, n });
+    }
+    if (!cuts.length) return [{ ...base, text: text.trim() }];
+    const out = [];
+    const head = text.slice(0, cuts[0].start).trim();
+    if (head || base.from != null || base.part !== 'main') out.push({ ...base, text: head });
+    cuts.forEach((c, k) => {
+        const body = text.slice(c.end, k + 1 < cuts.length ? cuts[k + 1].start : text.length).trim();
+        out.push({ date: base.date, part: base.part, from: c.n, to: null, toEnd: false, text: body });
+    });
+    return out;
+}
+
+// 心得：找出「5/30 31-38 …」「（6/4 - 39）…」「6/16 - 40 …」這類有日期的段落，拆成筆記
+// 回傳 { comment（第一個日期之前的總評）, notes, flags } 或 null（沒有日期段落）
+function parseCommentNotes(review) {
+    const text = review.comment || '';
+    const dateRe = /(^|[\s（(])[（(]?\s*(\d{1,2})\/(\d{1,2})(?:[-～~]\d{1,2})?/g;
+    const headers = [];
+    let m;
+    while ((m = dateRe.exec(text))) {
+        const month = Number(m[2]), day = Number(m[3]);
+        if (month < 1 || month > 12 || day < 1 || day > 31) continue;
+        const { note, end } = parseNoteHeader(text, dateRe.lastIndex);
+        headers.push({ start: m.index + m[1].length, end, month, day, note });
+        dateRe.lastIndex = end;
+    }
+    if (!headers.length) return null;
+
+    // 年份：以最後編輯時間為準；日期比最後編輯還晚的，算前一年
+    const edited = review.updatedAtTs ? new Date(review.updatedAtTs) : new Date(String(review.updatedAt || '').match(/^\d{4}\/\d{1,2}\/\d{1,2}/)?.[0] || Date.now());
+    const baseYear = isNaN(edited) ? new Date().getFullYear() : edited.getFullYear();
+    const editedKey = isNaN(edited) ? 1231 : (edited.getMonth() + 1) * 100 + edited.getDate();
+
+    const flags = [];
+    const ep = normalizeEpisode(review.episode) || {};
+    const notes = [];
+    headers.forEach((h, k) => {
+        const year = h.month * 100 + h.day > editedKey ? baseYear - 1 : baseYear;
+        const date = `${year}-${String(h.month).padStart(2, '0')}-${String(h.day).padStart(2, '0')}`;
+        // 下一則若以「（6/4 - 4）」開頭，那個「（」不屬於這一則
+        const body = text.slice(h.end, k + 1 < headers.length ? headers[k + 1].start : text.length).replace(/[（(]\s*$/, '');
+        const base = { date, ...h.note };
+        // 有外傳的作品，很小的話數多半是外傳（例如本篇 91 話、筆記寫「6/4 - 4」）
+        if (base.part === 'main' && base.from != null && ep.side && base.from <= ep.side && (base.to ?? base.from) <= ep.side && ep.main && base.from < ep.main / 2) {
+            base.part = 'side';
+            flags.push(`${h.month}/${h.day} 的 ${base.from}${base.to ? '–' + base.to : ''} 推測為外傳`);
+        }
+        notes.push(...splitSubNotes(base, body));
+    });
+    return { comment: text.slice(0, headers[0].start).replace(/[（(]\s*$/, '').trim(), notes, flags };
+}
+
 function starsText(rating) {
     const r = Math.max(0, Math.min(5, parseInt(rating) || 0));
     return '★'.repeat(r) + '☆'.repeat(5 - r);
@@ -192,7 +345,8 @@ function migrateReviews(list) {
             changed = true;
         }
         if (r.episode !== undefined && r.episode !== '') return;
-        const m = (r.title || '').match(/^(.*?)\s*[（(]\s*(\d+(?:\s*[+＋]\s*\d+){0,2})\s*[)）]\s*$/);
+        // 只自動處理一段或兩段（64、91+8）；三段的意思不一定，交給「整理舊資料」讓使用者確認
+        const m = (r.title || '').match(/^(.*?)\s*[（(]\s*(\d+(?:\s*[+＋]\s*\d+)?)\s*[)）]\s*$/);
         if (!m || !m[1].trim()) return;
         r.title = m[1].trim();
         r.episode = normalizeEpisode(m[2]);
@@ -327,6 +481,10 @@ function createReviewForm(container, options = {}) {
         <div class="form-section">
             <label class="form-label">한국어 제목</label>
             <input class="input" data-field="krTitle" placeholder="예: 상류사회" lang="ko">
+        </div>
+        <div class="form-section">
+            <label class="form-label">備註</label>
+            <input class="input" data-field="note" placeholder="例如：等翻譯、找不到外傳、下半年回歸">
         </div>
         <div class="form-section">
             <label class="form-label">閱讀狀態</label>
