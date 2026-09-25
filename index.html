@@ -359,6 +359,12 @@
         .cleanup-flag { color: #e6b450; }
         .cleanup-notes { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; }
         .cleanup-notes li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        /* 長文字收合 */
+        /* 截斷套在沒有內距的內層，外層的內距才不會露出下一行 */
+        .collapsible.collapsed .clamp-body { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+        .collapsible.collapsed .comment-text .clamp-body { -webkit-line-clamp: 6; line-clamp: 6; }
+        .collapsible.collapsed .note-text .clamp-body { -webkit-line-clamp: 4; line-clamp: 4; }
+        .expand-btn { border: none; background: none; color: var(--primary); font-weight: bold; font-size: 0.85rem; padding: 8px 0; min-height: 40px; cursor: pointer; }
         .comment-text { font-size: 1rem; color: var(--text-sub); line-height: 1.7; white-space: pre-wrap; word-break: break-word; background: var(--raised); padding: 12px 14px; border-radius: 10px; }
         .detail-section-title { font-size: 0.85rem; color: var(--text-muted); font-weight: bold; margin: 20px 0 8px; }
         .creator-list { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 0.92rem; }
@@ -1356,7 +1362,7 @@
                 ${r.startDate ? `<span style="color:#2ecc71;">시작 ${escapeHtml(r.startDate)}</span>` : ''}
                 ${r.endDate ? `<span style="color:#e74c3c;">끝 ${escapeHtml(r.endDate)}</span>` : ''}
             </div>` : ''}
-            ${r.comment ? `<div class="comment-text">${escapeHtml(r.comment)}</div>` : ''}
+            ${r.comment ? collapsibleHtml(r.comment, 'comment-text', 160) : ''}
             <div class="notes-head">
                 <div class="detail-section-title">閱讀筆記${(r.notes || []).length ? `（${r.notes.length}）` : ''}</div>
                 <button class="btn notes-add" onclick="openNoteEditor(${index})">＋ 筆記</button>
@@ -1368,6 +1374,20 @@
         `;
     }
 
+    // ---------- 長文字收合 ----------
+    // 超過 limit 字就先只顯示幾行，按「展開全文」看全部
+    function collapsibleHtml(text, cls, limit) {
+        if (text.length <= limit) return `<div class="${cls}">${escapeHtml(text)}</div>`;
+        const body = `<div class="${cls}"><div class="clamp-body">${escapeHtml(text)}</div></div>`;
+        return `<div class="collapsible collapsed">${body}<button class="expand-btn" onclick="event.stopPropagation(); toggleCollapse(this)">展開全文 ▾</button></div>`;
+    }
+
+    function toggleCollapse(btn) {
+        const box = btn.parentElement;
+        const collapsed = box.classList.toggle('collapsed');
+        btn.textContent = collapsed ? '展開全文 ▾' : '收合 ▴';
+    }
+
     // ---------- 閱讀筆記 ----------
     function notesTimelineHtml(r, index) {
         const notes = r.notes || [];
@@ -1377,7 +1397,7 @@
             return `
                 <div class="note-item" role="button" tabindex="0" onclick="openNoteEditor(${index}, ${k})">
                     <div class="note-meta">${n.date ? `<span>${noteDateLabel(n)}</span>` : '<span>沒有日期</span>'}${ep ? `<span class="ep-badge">${escapeHtml(ep)}</span>` : ''}</div>
-                    ${n.text ? `<div class="note-text">${escapeHtml(n.text)}</div>` : ''}
+                    ${n.text ? collapsibleHtml(n.text, 'note-text', 120) : ''}
                 </div>`;
         }).join('')}</div>`;
     }
