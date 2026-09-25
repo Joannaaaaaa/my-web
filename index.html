@@ -5,7 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#0f1218">
     <title>웹툰</title>
-    <link rel="stylesheet" href="common.css">
+    <script>
+        // 程式出錯時在畫面上顯示訊息，而不是整頁空白（放在最前面，common.js 載入失敗也能顯示）
+        window.addEventListener('error', e => {
+            const box = document.getElementById('fatalError') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'fatalError' }));
+            box.style.cssText = 'position:fixed;left:12px;right:12px;top:12px;z-index:9999;padding:12px 14px;border-radius:10px;background:#5a1d1d;color:#fff;font:14px/1.5 sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.5)';
+            box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
+        });
+    </script>
+    <link rel="stylesheet" href="common.css?v=20260925-2">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -490,7 +498,7 @@
     </div>
 </div>
 
-<script src="common.js"></script>
+<script src="common.js?v=20260925-2"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added' }, Store.loadUi());
