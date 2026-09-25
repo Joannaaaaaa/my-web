@@ -369,7 +369,6 @@
         /* 截斷套在沒有內距的內層，外層的內距才不會露出下一行 */
         .collapsible.collapsed .clamp-body { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
         .collapsible.collapsed .comment-text .clamp-body { -webkit-line-clamp: 6; line-clamp: 6; }
-        .collapsible.collapsed .note-text .clamp-body { -webkit-line-clamp: 4; line-clamp: 4; }
         .expand-btn { border: none; background: none; color: var(--primary); font-weight: bold; font-size: 0.85rem; padding: 8px 0; min-height: 40px; cursor: pointer; }
         .comment-text { font-size: 1rem; color: var(--text-sub); line-height: 1.7; white-space: pre-wrap; word-break: break-word; background: var(--raised); padding: 12px 14px; border-radius: 10px; }
         .detail-section-title { font-size: 0.85rem; color: var(--text-muted); font-weight: bold; margin: 20px 0 8px; }
@@ -1404,7 +1403,7 @@
             return `
                 <div class="note-item" role="button" tabindex="0" onclick="openNoteEditor(${index}, ${k})">
                     <div class="note-meta">${n.date ? `<span>${noteDateLabel(n)}</span>` : '<span>沒有日期</span>'}${ep ? `<span class="ep-badge">${escapeHtml(ep)}</span>` : ''}</div>
-                    ${n.text ? collapsibleHtml(n.text, 'note-text', 120) : ''}
+                    ${n.text ? `<div class="note-text">${escapeHtml(n.text)}</div>` : ''}
                 </div>`;
         }).join('')}</div>`;
     }
