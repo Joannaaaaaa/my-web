@@ -42,6 +42,7 @@ const STORAGE_KEYS = {
     memo: 'my_review_memo',
     draft: 'comic_review_draft',
     ui: 'my_review_ui',
+    commentTracker: 'comment_tracker', // 平台留言追蹤（platform-comments.html）
 };
 
 // ---------- 小工具 ----------
@@ -528,6 +529,8 @@ const Store = {
     clearDraft() { localStorage.removeItem(STORAGE_KEYS.draft); },
     loadUi() { return readJson(STORAGE_KEYS.ui, {}); },
     saveUi(prefs) { localStorage.setItem(STORAGE_KEYS.ui, JSON.stringify(prefs)); },
+    loadTracker() { return readJson(STORAGE_KEYS.commentTracker, null); },
+    saveTracker(data) { localStorage.setItem(STORAGE_KEYS.commentTracker, JSON.stringify(data)); },
 };
 
 // ---------- 封面圖 ----------

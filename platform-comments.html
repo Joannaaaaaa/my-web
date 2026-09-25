@@ -1,11 +1,16 @@
 <!DOCTYPE html>
-<html lang="zh-TW" data-theme="dark" data-theme-lock><!-- 這頁樣式另外寫，固定深色 -->
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#0f1218">
-    <title>平台留言查詢</title>
+    <title>平台留言</title>
     <script>
+        // 外觀：在畫面出現前先套用使用者選的深色／淺色，避免閃一下
+        try {
+            const theme = JSON.parse(localStorage.getItem('my_review_ui') || '{}').theme;
+            if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+        } catch (e) {}
         // 程式出錯時在畫面上顯示訊息，而不是整頁空白（放在最前面，common.js 載入失敗也能顯示）
         window.addEventListener('error', e => {
             const box = document.getElementById('fatalError') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'fatalError' }));
@@ -13,423 +18,704 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-5">
+    <link rel="stylesheet" href="common.css?v=20260926-6">
     <style>
-        :root { --primary: #3498db; --bg: #0f1218; --card-bg: #1a1d24; --text: #ecf0f1; --best-green: #27ae60; --reply-gold: #f1c40f; --dislike-red: #e74c3c; }
-        body { font-family: 'PingFang TC', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
-        .container { max-width: 800px; margin: auto; }
-        .nav { margin-bottom: 20px; }
-        .nav a { color: var(--primary); text-decoration: none; font-weight: bold; }
-        
-        .search-box { 
-            background: var(--card-bg); 
-            padding: 16px; 
-            border-radius: 12px; 
-            border: 1px solid #333; 
-            margin-bottom: 20px; 
+        body { padding-bottom: calc(24px + var(--safe-bottom)); }
+        body.no-scroll { overflow: hidden; }
+        .topbar {
+            position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 4px;
+            padding: 6px 8px; padding-top: calc(6px + env(safe-area-inset-top, 0px));
+            background: var(--toolbar-bg); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
         }
-        /* ✨ 工具列佈局：桌面版保持水平一條龍排列 */
-        .filter-group {
-            display: flex;
-            gap: 10px;
-            max-width: 650px;
-            margin: 0 auto;
-            align-items: center;
+        .topbar h1 { font-size: 1.1rem; margin: 0; flex: 1; }
+        .server-pill { font-size: 0.75rem; padding: 3px 10px; border-radius: 12px; background: var(--raised); color: var(--text-muted); white-space: nowrap; }
+        .server-pill.ok { color: var(--status-ongoing); }
+        .server-pill.bad { color: var(--danger); }
+        .page { max-width: 760px; margin: auto; padding: 12px 16px; }
+
+        .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+        .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 8px; text-align: center; }
+        .kpi-value { font-size: 1.3rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .kpi-label { font-size: 0.72rem; color: var(--text-muted); }
+        .kpi.highlight .kpi-value { color: var(--backlog-text); }
+
+        .actions { display: flex; gap: 10px; margin-bottom: 8px; }
+        .actions .btn-primary { flex: 1; min-height: 48px; }
+        .progress { font-size: 0.82rem; color: var(--text-sub); background: var(--raised); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; display: flex; gap: 10px; align-items: center; }
+        .progress span { flex: 1; }
+        .progress .btn { min-height: 34px; padding: 0 12px; font-size: 0.8rem; }
+        .last-run { font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-bottom: 12px; }
+        .run-errors { font-size: 0.8rem; color: var(--flag-text); margin-bottom: 12px; display: grid; gap: 4px; }
+
+        .source { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
+        .source > summary { list-style: none; cursor: pointer; padding: 12px 14px; }
+        .source > summary::-webkit-details-marker { display: none; }
+        .source-head { display: flex; align-items: center; gap: 8px; }
+        .source-name { font-weight: bold; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .source-sub { font-size: 0.76rem; color: var(--text-muted); margin-top: 4px; }
+        .new-badge { font-size: 0.72rem; font-weight: bold; padding: 2px 8px; border-radius: 10px; background: var(--backlog-bg); color: var(--backlog-text); white-space: nowrap; }
+        .source-body { padding: 0 14px 12px; }
+        .source-actions { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 8px; }
+        .source-actions .btn { min-height: 36px; padding: 0 12px; font-size: 0.8rem; }
+
+        .cmt { border-top: 1px solid var(--border); padding: 10px 0; }
+        .cmt.has-new { background: var(--backlog-bg); margin: 0 -14px; padding: 10px 14px; }
+        .cmt-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; }
+        .ep-badge { font-size: 0.72rem; font-weight: bold; padding: 1px 7px; border-radius: 6px; background: var(--ep-bg); color: var(--ep-text); }
+        .best { font-size: 0.68rem; font-weight: bold; padding: 1px 6px; border-radius: 5px; background: var(--status-ongoing); color: #fff; }
+        .cmt-parent { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px; border-left: 2px solid var(--border-strong); padding-left: 8px; }
+        .cmt-body { font-size: 0.92rem; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+        .cmt-metrics { display: flex; gap: 12px; font-size: 0.8rem; color: var(--text-sub); margin-top: 6px; align-items: center; }
+        .cmt-metrics .new { color: var(--backlog-text); font-weight: bold; }
+        .cmt-missing { font-size: 0.75rem; color: var(--flag-text); margin-top: 4px; }
+        .reply-list { margin-top: 6px; font-size: 0.82rem; }
+        .reply-list summary { cursor: pointer; color: var(--link); min-height: 32px; display: flex; align-items: center; }
+        .reply { padding: 6px 0 6px 10px; border-left: 2px solid var(--border); margin-left: 2px; }
+        .reply b { color: var(--text-sub); font-weight: bold; margin-right: 6px; }
+        .show-more { border: none; background: none; color: var(--link); font-weight: bold; padding: 10px 0 0; cursor: pointer; font-size: 0.85rem; }
+        .empty { text-align: center; color: var(--text-faint); padding: 40px 12px; line-height: 1.8; }
+
+        /* 設定面板 */
+        .backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); z-index: 90; }
+        .sheet {
+            position: fixed; left: 0; right: 0; bottom: 0; z-index: 100; max-height: 88vh; overflow-y: auto;
+            background: var(--card-bg); border-radius: 16px 16px 0 0; max-width: 680px; margin: auto;
+            padding: 8px 16px calc(20px + var(--safe-bottom)); animation: slideUp 0.2s ease-out;
         }
-        
-        /* 隱藏原生 file input */
-        .btn-upload {
-            background: #34495e;
-            color: white;
-            padding: 10px 15px;
-            border-radius: 8px;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 0.95rem;
-            transition: background 0.2s;
-            white-space: nowrap;
-            text-align: center;
-        }
-        .btn-upload:hover { background: #2c3e50; }
-
-        .select-platform {
-            flex: 1;
-            padding: 10px 14px; 
-            background: #0f1218; 
-            color: white; 
-            border: 1px solid #444; 
-            border-radius: 8px; 
-            cursor: pointer;
-            font-size: 0.95rem;
-            outline: none;
-        }
-        .select-platform:focus { border-color: var(--primary); }
-
-        .btn-search { 
-            background: var(--primary); 
-            color: white; 
-            border: none; 
-            padding: 10px 20px; 
-            border-radius: 8px; 
-            font-weight: bold; 
-            cursor: pointer; 
-            font-size: 0.95rem; 
-            transition: background 0.2s;
-            white-space: nowrap;
-        }
-        .btn-search:hover { background: #2980b9; }
-        
-        .comment-card { background: var(--card-bg); border-radius: 15px; padding: 20px; margin-bottom: 20px; position: relative; border: 1px solid #333; transition: 0.3s; }
-        .reply-card { border-left: 4px solid var(--reply-gold); background: rgba(241, 196, 15, 0.05); margin-left: 20px; }
-        .best-badge { position: absolute; top: -10px; left: -10px; background: var(--best-green); color: white; padding: 4px 12px; border-radius: 6px; font-weight: bold; font-size: 0.8rem; box-shadow: 0 0 10px rgba(39, 174, 96, 0.5); }
-        .user-info { font-size: 0.9rem; color: var(--primary); font-weight: bold; margin-bottom: 10px; }
-        .platform-tag { font-size: 0.7rem; padding: 3px 8px; border-radius: 6px; font-weight: bold; vertical-align: middle; }
-        .wt-tag { background: #00d564; color: black; }
-        .ridi-tag { background: #1e9eff; color: white; }
-        .content { font-size: 1.05rem; line-height: 1.6; white-space: pre-wrap; margin-bottom: 15px; }
-        .footer-metrics { display: flex; gap: 20px; font-size: 0.85rem; color: #7f8c8d; border-top: 1px solid #333; padding-top: 10px; }
-        .date { margin-left: auto; }
-        .reply-hint { font-size: 0.8rem; color: var(--reply-gold); margin-bottom: 8px; }
-        #status-summary { color: #27ae60; font-size: 1.1rem; margin-top: 10px; font-weight: bold; }
-
-        /* ✨ RWD 行動裝置排版優化 */
-        @media screen and (max-width: 600px) {
-            body { padding: 10px; }
-            .search-box { padding: 12px; }
-            
-            /* 手機版改用 wrap，以便配置精緻佈局 */
-            .filter-group {
-                flex-wrap: wrap;
-                gap: 8px;
-            }
-
-            /* 📂 上傳按鈕與下拉選單：在手機版變成左右併排各佔一半（按鈕不變肥） */
-            .btn-upload, .select-platform {
-                flex: 1;
-                width: calc(50% - 4px) !important;
-                font-size: 16px;
-                padding: 12px;
-                box-sizing: border-box;
-            }
-
-            /* 🚀 開始按鈕：在手機版獨佔下方一整行，超級好點擊 */
-            .btn-search {
-                width: 100% !important;
-                font-size: 0.95rem;
-                padding: 12px;
-                box-sizing: border-box;
-                text-align: center;
-            }
-
-            .comment-card { padding: 15px; margin-bottom: 15px; }
-            .best-badge { top: -8px; left: -8px; font-size: 0.7rem; padding: 3px 8px; }
-            .content { font-size: 0.95rem; }
-            .footer-metrics { gap: 10px; flex-wrap: wrap; }
-            .date { width: 100%; text-align: left; margin-top: 5px; margin-left: 0; }
-            #fileNameDisplay { font-size: 0.75rem; }
-            #status-summary { font-size: 1rem; }
-        }
+        @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+        .sheet-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .sheet-top h3 { margin: 0; font-size: 1rem; }
+        .sheet h4 { font-size: 0.88rem; color: var(--text-sub); margin: 18px 0 8px; }
+        .user-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; align-items: center; }
+        .user-grid label { font-size: 0.85rem; color: var(--text-sub); }
+        .detect { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; min-height: 1.2em; }
+        .detect.ok { color: var(--status-ongoing); }
+        .src-edit { border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-bottom: 8px; }
+        .src-edit.flash { border-color: var(--primary); }
+        .src-edit-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+        .src-edit-head .input { min-height: 40px; }
+        .src-edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .src-edit-grid label { font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 2px; }
+        .src-edit-grid .input { min-height: 38px; padding: 6px 10px; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div class="nav"><a href="index.html">← 返回主頁</a></div>
-    
-    <div class="search-box">
-        <div class="filter-group">
-            <label for="jsonFileInput" class="btn-upload">📂 上傳 JSON 清單</label>
-            <input type="file" id="jsonFileInput" accept=".json" style="display: none;" onchange="handleFileSelect(this)">
-            
-            <select id="platformFilter" class="select-platform">
-                <option value="all">顯示全部平台</option>
-                <option value="ridi">Ridibooks</option>
-                <option value="naver">Naver</option>
-                <option value="webtoon">Webtoon</option>
-            </select>
-            <button class="btn-search" onclick="fetchAndFilter()">開始</button>
-        </div>
-        <div id="fileNameDisplay" style="text-align: center; font-size: 0.8rem; color: var(--primary); margin-top: 8px; font-weight: bold;">⚠️ 請先上傳觀測清單 JSON 檔</div>
-    </div>    
-    
-    <div id="status" style="text-align:center; color:#7f8c8d; margin-bottom:20px;">
-        <div>上傳檔案後點擊開始同步數據</div>
-        <div id="status-summary"></div>
+<header class="topbar">
+    <a class="icon-btn" href="index.html" aria-label="返回" style="text-decoration:none; font-size:2.2rem;">‹</a>
+    <h1>平台留言</h1>
+    <span class="server-pill" id="serverPill">連線中…</span>
+    <button class="icon-btn" onclick="openSettings()" aria-label="設定">⚙</button>
+</header>
+
+<main class="page">
+    <div class="kpi-row" id="kpis"></div>
+    <div class="actions">
+        <button class="btn btn-primary" id="runBtn" onclick="runUpdate()">🔄 更新留言</button>
+    </div>
+    <div class="progress" id="progress" hidden><span id="progressText"></span><button class="btn" onclick="cancelRun()">停止</button></div>
+    <div class="last-run" id="lastRun"></div>
+    <div class="run-errors" id="runErrors" hidden></div>
+    <div id="sources"></div>
+</main>
+
+<div class="backdrop" id="settingsBackdrop" hidden onclick="closeSettings()"></div>
+<div class="sheet" id="settings" hidden>
+    <div class="sheet-top">
+        <h3>留言追蹤設定</h3>
+        <button class="icon-btn" onclick="closeSettings()" aria-label="關閉">✕</button>
     </div>
 
-    <div id="commentList"></div>
+    <h4>帳號名稱</h4>
+    <div class="user-grid">
+        <label for="userWebtoon">Webtoon</label><input class="input" id="userWebtoon" data-user="webtoon" placeholder="例如 abc">
+        <label for="userNaver">Naver</label><input class="input" id="userNaver" data-user="naver" placeholder="例如 abc">
+        <label for="userRidi">Ridi</label><input class="input" id="userRidi" data-user="ridi" placeholder="例如 abc">
+    </div>
+    <div class="form-hint">平台會遮住部分名字，填開頭幾個字就好。找到你的留言後會記住帳號，之後比對更準確。</div>
+
+    <h4>自動找新留言</h4>
+    <div class="user-grid">
+        <label for="newPerRun">每次往後找</label>
+        <div style="display:flex; align-items:center; gap:8px;"><input class="input" id="newPerRun" inputmode="numeric" style="max-width:80px; text-align:center;"><span style="color: var(--text-muted); font-size: 0.85rem;">話</span></div>
+    </div>
+    <div class="form-hint">每次更新會從「已掃到」的下一話開始，往後找幾話有沒有你的留言；還沒出的話數會自動停下。</div>
+
+    <h4>新增追蹤作品</h4>
+    <input class="input" id="addUrl" placeholder="貼上作品網址（Webtoon、Naver、Ridi）" inputmode="url" autocapitalize="off" autocorrect="off">
+    <div class="detect" id="addDetect"></div>
+    <div class="form-row" style="margin-top:8px;">
+        <input class="input" id="addName" placeholder="顯示名稱">
+        <input class="input" id="addFrom" inputmode="numeric" placeholder="已看到第幾話">
+    </div>
+    <div class="form-hint">會從「已看到」的下一話開始自動找；想找以前的留言，之後可以用「補掃」。</div>
+    <button class="btn btn-primary" style="width:100%; margin-top:8px;" onclick="addSourceFromForm()">新增</button>
+
+    <h4>匯入舊的 JSON</h4>
+    <button class="btn" style="width:100%;" onclick="document.getElementById('importPicker').click()">📤 選擇 database.json／queue.json</button>
+    <input type="file" id="importPicker" accept=".json,application/json" multiple hidden>
+    <div class="form-hint">可以一次選兩個檔案。作品清單和已知留言的話數會併入，重複的不會重複加。</div>
+
+    <h4>追蹤中的作品</h4>
+    <div id="sourceEditors"></div>
+
+    <h4>其他</h4>
+    <button class="btn" style="width:100%;" onclick="runUpdate({ full: true }); closeSettings();">完整重新檢查所有已知留言</button>
+    <div class="form-hint">平常更新只重新檢查 60 天內的留言；這個會檢查全部，比較久。</div>
 </div>
 
-<script src="common.js?v=20260926-5"></script>
+<script src="common.js?v=20260926-6"></script>
 <script>
+    // 瀏覽器不能直接呼叫各平台的 API（沒開 CORS、需要特殊標頭），所以透過 comment.js 伺服器轉發
     const API_BASE_URL = window.location.protocol === 'https:'
-    ? 'https://webtoon-api-e0vg.onrender.com'
-    : 'http://localhost:3000';
+        ? 'https://webtoon-api-e0vg.onrender.com'
+        : 'http://localhost:3000';
 
-    let uploadedQueue = null;
+    const PLATFORM_INFO = {
+        webtoon: { label: 'Webtoon', color: '#00d564', pageId: (s, n) => `w_${s.seriesId}_${n}` },
+        naver: { label: 'Naver', color: '#03cf5d', pageId: (s, n) => `webtoon_${s.seriesId}_${n}` },
+        ridi: { label: 'Ridi', color: '#00a0e9' },
+    };
+    const RECHECK_DAYS = 60;
+    const REQUEST_GAP = 400; // 每次請求之間的間隔（毫秒），避免被平台擋
 
-    function handleFileSelect(input) {
-        const file = input.files[0];
-        const nameDisplay = document.getElementById('fileNameDisplay');
-        const statusText = document.querySelector('#status div:first-child');
-        
-        if (!file) return;
+    // ---------- 資料 ----------
+    // tracker = {
+    //   usernames: { webtoon, naver, ridi }, userIds: { 平台: [找到過的帳號 id] }, newPerRun,
+    //   sources: [{ id, platform, name, url, seriesId, offset, lastScanned, ridiMap,
+    //               episodes: { 話數: { pageId, checkedAt, pending?, comments: [...] } } }],
+    //   lastRun
+    // }
+    function loadTracker() {
+        const t = Store.loadTracker() || {};
+        return {
+            usernames: { webtoon: '', naver: '', ridi: '', ...t.usernames },
+            userIds: { webtoon: [], naver: [], ridi: [], ...t.userIds },
+            newPerRun: t.newPerRun || 3,
+            sources: t.sources || [],
+            lastRun: t.lastRun || null,
+        };
+    }
+    let tracker = loadTracker();
+    const save = () => Store.saveTracker(tracker);
 
-        nameDisplay.innerText = `📄 已載入檔案：${file.name}`;
-        
-        const reader = new FileReader();
-        reader.onload = function(e) {
+    // 從網址認出平台與作品編號
+    function parseSourceUrl(url) {
+        const u = String(url || '').trim();
+        let m;
+        if ((m = u.match(/webtoons\.com\/.*[?&]title_no=(\d+)/))) return { platform: 'webtoon', seriesId: m[1] };
+        if ((m = u.match(/comic\.naver\.com\/.*[?&]titleId=(\d+)/))) return { platform: 'naver', seriesId: m[1] };
+        if ((m = u.match(/ridibooks\.com\/books\/(\d+)/))) return { platform: 'ridi', seriesId: m[1] };
+        return null;
+    }
+
+    function findSource(platform, seriesId) {
+        return tracker.sources.find(s => s.platform === platform && s.seriesId === seriesId);
+    }
+
+    function createSource({ platform, seriesId, name, url = '', lastScanned = 0 }) {
+        const source = {
+            id: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+            platform, seriesId, name: name || `${PLATFORM_INFO[platform].label} ${seriesId}`, url,
+            offset: 0, lastScanned, episodes: {},
+        };
+        tracker.sources.push(source);
+        return source;
+    }
+
+    // ---------- 伺服器 ----------
+    class Cancelled extends Error {}
+    let cancelled = false;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    async function api(path) {
+        if (cancelled) throw new Cancelled();
+        const res = await fetch(API_BASE_URL + path);
+        if (!res.ok) {
+            const err = new Error((await res.text()) || `HTTP ${res.status}`);
+            err.status = res.status;
+            throw err;
+        }
+        return res.json();
+    }
+
+    // 打開頁面就先叫醒 Render（免費方案閒置會休眠，第一次要等十幾秒）
+    async function wakeServer() {
+        const pill = document.getElementById('serverPill');
+        pill.className = 'server-pill';
+        pill.textContent = '喚醒伺服器中…';
+        try {
+            await fetch(API_BASE_URL + '/ping'); // 舊版伺服器沒有 /ping 會回 404，但有回應就代表醒了
+            pill.className = 'server-pill ok';
+            pill.textContent = '已連線';
+        } catch (err) {
+            pill.className = 'server-pill bad';
+            pill.textContent = API_BASE_URL.includes('localhost') ? '本機伺服器沒開' : '連不上伺服器';
+        }
+    }
+
+    // ---------- 抓留言 ----------
+    const likeCount = (c, id) => c.reactions?.[0]?.emotions?.find(e => e.emotionId === id)?.count || 0;
+
+    // 三個平台的留言格式不同，統一成同一種
+    function normalize(platform, c) {
+        if (platform === 'ridi') {
+            return {
+                id: String(c.comment_id), name: c.user_id || '', userId: c.user_idx != null ? String(c.user_idx) : null,
+                body: c.content || '', likes: c.like_count || 0, dislikes: 0, replies: c.reply_count || 0,
+                best: !!c.is_best, createdAt: Date.parse(c.created) || null,
+            };
+        }
+        return {
+            id: c.id, name: c.createdBy?.name || '', userId: c.createdBy?.id || null,
+            body: c.body || '', likes: likeCount(c, 'like'), dislikes: likeCount(c, 'dislike'), replies: c.childPostCount || 0,
+            best: !!(c.isTop || c.isPinned), createdAt: typeof c.createdAt === 'number' ? c.createdAt : (Date.parse(c.createdAt) || null),
+        };
+    }
+
+    function isMine(platform, c) {
+        if (c.userId && tracker.userIds[platform].includes(c.userId)) return true;
+        const u = (tracker.usernames[platform] || '').trim().toLowerCase();
+        return !!u && c.name.toLowerCase().startsWith(u);
+    }
+
+    function rememberUser(platform, c) {
+        if (c.userId && !tracker.userIds[platform].includes(c.userId)) tracker.userIds[platform].push(c.userId);
+    }
+
+    async function ridiEpisodeId(source, ep) {
+        if (!source.ridiMap?.[ep]) {
+            const list = await api(`/ridi-episodes?bookId=${source.seriesId}`);
+            source.ridiMap = Object.fromEntries(list.map(e => [e.volume, e.id]));
+        }
+        return source.ridiMap[ep] || null;
+    }
+
+    // 某一話全部的留言（主留言）；回傳 null 代表這一話不存在
+    async function fetchRoots(platform, pageId, onPage) {
+        const all = [];
+        let cursor = '', offset = 0;
+        const limit = 200;
+        for (let page = 1; page <= 50; page++) {
+            onPage(page);
+            const q = platform === 'ridi'
+                ? `bookId=${pageId}&platform=ridi&limit=${limit}&offset=${offset}`
+                : `bookId=${pageId}&platform=${platform}&limit=${limit}&offsetPostId=${encodeURIComponent(cursor)}`;
+            let data;
             try {
-                uploadedQueue = JSON.parse(e.target.result);
-                statusText.innerHTML = `✅ 成功載入 ${uploadedQueue.length} 筆觀測目標，請點擊「開始」按鈕。`;
-                console.log("成功匯入佇列:", uploadedQueue);
+                data = await api(`/get-comments?${q}`);
             } catch (err) {
-                alert("JSON 格式解析失敗，請確認檔案內容是否正確！");
-                nameDisplay.innerText = "❌ 檔案解析失敗";
-                uploadedQueue = null;
+                // Naver／Webtoon 還沒出的話數，伺服器會回 500
+                if (page === 1 && platform !== 'ridi' && err.status === 500) return null;
+                throw err;
             }
-        };
-        reader.readAsText(file);
+            let list, more;
+            if (platform === 'ridi') {
+                list = data.serial_comment?.comments || [];
+                more = list.length === limit;
+                offset += limit;
+            } else {
+                const r = data.result || {};
+                list = [...(page === 1 ? (r.tops || []) : []), ...(r.posts || [])];
+                cursor = r.pagination?.next || '';
+                more = !!cursor;
+            }
+            all.push(...list.map(c => normalize(platform, c)));
+            if (!more) break;
+            await sleep(REQUEST_GAP);
+        }
+        const seen = new Set();
+        return all.filter(c => !seen.has(c.id) && seen.add(c.id));
     }
 
-    function getMetrics(c, platform) {
-        let likes = 0;
-        let dislikes = 0;
-        let replies = 0;
-        if (platform === 'webtoon' || platform === 'naver') {
-            likes = c.reactions?.[0]?.emotions?.find(e => e.emotionId === 'like')?.count || 0;
-            dislikes = c.reactions?.[0]?.emotions?.find(e => e.emotionId === 'dislike')?.count || 0;
-            replies = c.childPostCount || 0;
-        } else if (platform === 'ridi') {
-            likes = c.like_count || 0;
-            replies = c.reply_count || 0;
-            dislikes = 0;
-        }
-        return { likes, dislikes, replies };
+    async function fetchReplies(platform, pageId, postId) {
+        const data = await api(`/get-replies?postId=${encodeURIComponent(postId)}&limit=100&bookId=${pageId}&platform=${platform}`);
+        const list = platform === 'ridi' ? (data.serial_comment?.replies || []) : (data.result?.posts || []);
+        return list.map(r => normalize(platform, r));
     }
 
-    async function fetchAndFilter() {
-        const listContainer = document.getElementById('commentList');
-        const statusText = document.querySelector('#status div:first-child');
-        const statusSummary = document.getElementById('status-summary');
-        const selectedPlatform = document.getElementById('platformFilter').value;
-        
-        if (!uploadedQueue || uploadedQueue.length === 0) {
-            alert("請先點擊『上傳 JSON 清單』按鈕選取您的 JSON 檔案！");
-            return;
-        }
-        
-        listContainer.innerHTML = '';
-        statusSummary.innerHTML = '';
-        
-        let totalFound = 0;
-        let totalLikes = 0;
-        let totalReplies = 0; 
+    // 掃一話，找出我的留言（主留言，或回覆在別人底下的留言）
+    // discover：找新留言，要檢查所有有回覆的留言；recheck：只看我的留言與我回覆過的那幾則
+    async function scanEpisode(source, ep, mode) {
+        const platform = source.platform;
+        const pageId = platform === 'ridi'
+            ? await ridiEpisodeId(source, ep)
+            : PLATFORM_INFO[platform].pageId(source, ep + (Number(source.offset) || 0));
+        if (!pageId) return { exists: false };
 
-        const updateUIStats = () => {
-            statusSummary.innerHTML = `累積讚數: ${totalLikes} | 累積被回覆數: ${totalReplies}`;
-        };
+        const prev = source.episodes[ep]?.comments || [];
+        const knownParents = new Set(prev.filter(c => c.kind === 'reply').map(c => c.parentId));
+        const roots = await fetchRoots(platform, pageId, page => setProgress(`${source.name} 第 ${ep} 話${page > 1 ? `（第 ${page} 頁）` : ''}`));
+        if (roots === null) return { exists: false };
 
-        for (const item of uploadedQueue) {
-            if (selectedPlatform !== 'all' && item.platform !== selectedPlatform) {
-                continue; 
+        const found = [];
+        for (const c of roots) {
+            const mine = isMine(platform, c);
+            if (!c.replies || !(mine || knownParents.has(c.id) || mode === 'discover')) {
+                if (mine) { rememberUser(platform, c); found.push({ ...c, kind: 'main', replyList: [] }); }
+                continue;
             }
-
-            let offset = 0;
-            let hasMore = true;
-            let lastPostId = "";
-            let limit = 200; 
-            const targetSearch = item.targetName;
-
-            while (hasMore) {
-                statusText.innerHTML = `🔍 正在搜尋 <b>${escapeHtml(item.platform)}</b> (${escapeHtml(targetSearch)}) 話次: ${escapeHtml(item.id)}...`;
-                try {
-                    const url = `${API_BASE_URL}/get-comments?bookId=${item.id}&limit=${limit}&platform=${item.platform}&offsetPostId=${lastPostId}&offset=${offset}`;
-                    console.log("running: "+url)
-                    const response = await fetch(url);
-                    console.log("running: "+response.status)
-                    if (!response.ok) throw new Error(`主留言獲取失敗: ${response.status}`);
-                    
-                    const data = await response.json();
-                    let comments = [];
-
-                    if (item.platform === 'webtoon' || item.platform === 'naver') {
-                        comments = data.result?.posts || [];
-                        if (comments.length > 0) {
-                            lastPostId = comments[comments.length - 1].id;
-                            hasMore = (comments.length === limit);
-                        } else { hasMore = false; }
-                    } else if (item.platform === 'ridi') {
-                        comments = data.serial_comment?.comments || [];
-                        hasMore = (comments.length === limit); 
-                    }
-                    
-                    // 1. 篩選出屬於「我自己的主留言」
-                    const myMainComments = comments.filter(c => {
-                        const userName = (item.platform === 'webtoon' || item.platform === 'naver') ? c.createdBy?.name : c.user_id;
-                        return userName && (userName.startsWith(targetSearch) || userName === targetSearch);
-                    });
-                    
-                    // 2. 累加自己主留言的按讚數（此處先不直接渲染，交給後面迴圈統整順序輸出）
-                    myMainComments.forEach(c => {
-                        const m = getMetrics(c, item.platform);
-                        totalLikes += m.likes;
-                    });
-
-                    myMainComments.forEach(c => {
-                        const name = (item.platform === 'ridi') ? c.user_id : c.createdBy?.name;
-                        const body = (item.platform === 'ridi') ? c.content : c.body;
-                        console.log(`📌 [${item.platform} 主留言] 👤 ${name} : ${body}`);
-                    });
-                    
-                    // 3. 收集自己所有主留言的 ID 備用
-                    const myMainCommentIds = myMainComments.map(c => (item.platform === 'ridi' ? c.comment_id : c.id));
-
-                    // 4. 開始巡檢整頁的所有主留言，尋找對話流
-                    for (const post of comments) {
-                        const postId = (item.platform === 'ridi' ? post.comment_id : post.id);
-                        const postBody = (item.platform === 'ridi' ? post.content : post.body);
-                        const hasReplies = (item.platform === 'ridi' ? post.reply_count > 0 : post.childPostCount > 0);
-
-                        const isMyMainPost = myMainCommentIds.includes(postId);
-
-                        if (hasReplies) {
-                            try {
-                                const replyUrl = `${API_BASE_URL}/get-replies?postId=${postId}&limit=100&bookId=${item.id}&platform=${item.platform}`;
-                                const replyRes = await fetch(replyUrl);
-                                
-                                if (!replyRes.ok) {
-                                    console.warn(`跳過回覆抓取 (PostID: ${postId}): ${replyRes.status}`);
-                                    continue;
-                                }
-
-                                const replyData = await replyRes.json();
-                                
-                                let allReplies = [];
-                                if (item.platform === 'ridi') {
-                                    allReplies = replyData.serial_comment?.replies || [];
-                                } else {
-                                    allReplies = replyData.result?.posts || [];
-                                }
-
-                                allReplies.forEach(r => {
-                                    const rName = (item.platform === 'ridi') ? r.user_id : r.createdBy?.name;
-                                    const rBody = r.content || r.body || '';
-                                    console.log(`   💬 [${item.platform} 回覆] 👤 ${rName} : ${rBody.substring(0, 50)}`);
-                                });
-
-                                // 💡 【情況 A】：這則主留言是別人的，但「我有在底下回覆別人」
-                                const myRepliesInOthersPost = allReplies.filter(r => {
-                                    const name = (item.platform === 'ridi' ? r.user_id : r.createdBy?.name || "");
-                                    return (name.startsWith(targetSearch) && !isMyMainPost);
-                                });
-
-                                if (myRepliesInOthersPost.length > 0) {
-                                    myRepliesInOthersPost.forEach(r => {
-                                        const m = getMetrics(r, item.platform);
-                                        totalLikes += m.likes; 
-                                    });
-                                    totalFound += myRepliesInOthersPost.length;
-
-                                    // 先畫出「被我回覆的那個別人的主留言」
-                                    renderComments([post], item, listContainer, null);
-                                    // 緊接著畫出「我的回覆內容卡片」
-                                    renderComments(myRepliesInOthersPost, item, listContainer, postBody); 
-                                    
-                                    updateUIStats();
-                                }
-
-                                // 💡 【情況 B】：這則主留言是我寫的，而且「有別人跑來回覆我」
-                                if (isMyMainPost) {
-                                    // 🎯 修正：不論有沒有實際抓到回覆，只要是我發的主留言，就立刻渲染出來！
-                                    renderComments([post], item, listContainer, null);
-                                    totalFound += 1; 
-
-                                    if (allReplies.length > 0) {
-                                        totalReplies += allReplies.length; 
-                                        
-                                        allReplies.forEach(r => {
-                                            const m = getMetrics(r, item.platform);
-                                            totalLikes += m.likes;
-                                        });
-
-                                        // 緊接著在下方渲染所有實際存在的「別人回覆我的內容」
-                                        renderComments(allReplies, item, listContainer, postBody);
-                                    }
-                                    updateUIStats();
-                                }
-                            } catch (replyErr) {
-                                console.error(`回覆解析錯誤 (PostID: ${postId}):`, replyErr);
-                            }
-                        }
-                    }
-                    
-                    // 5. 【獨立主留言防呆】：渲染那些「完全沒有回覆、孤零零」的我自己的主留言
-                    const noReplyMainComments = myMainComments.filter(c => {
-                        const cId = (item.platform === 'ridi' ? c.comment_id : c.id);
-                        const hasReplies = (item.platform === 'ridi' ? c.reply_count > 0 : c.childPostCount > 0);
-                        return !hasReplies;
-                    });
-                    
-                    if (noReplyMainComments.length > 0) {
-                        totalFound += noReplyMainComments.length;
-                        renderComments(noReplyMainComments, item, listContainer);
-                        updateUIStats();
-                    }
-                    
-                    if (hasMore) {
-                        offset += limit;
-                        await new Promise(r => setTimeout(r, 1000));
-                    }
-                } catch (e) {
-                    console.error("主流程錯誤:", e);
-                    hasMore = false;
+            await sleep(REQUEST_GAP);
+            const replies = await fetchReplies(platform, pageId, c.id);
+            if (mine) {
+                rememberUser(platform, c);
+                const others = replies.filter(r => !isMine(platform, r));
+                found.push({ ...c, kind: 'main', replies: Math.max(c.replies, others.length),
+                    replyList: others.map(r => ({ name: r.name, body: r.body, likes: r.likes, createdAt: r.createdAt })) });
+            } else {
+                for (const r of replies.filter(r => isMine(platform, r))) {
+                    rememberUser(platform, r);
+                    found.push({ ...r, kind: 'reply', parentId: c.id, parentName: c.name, parentBody: c.body.slice(0, 60) });
                 }
             }
         }
-        statusText.innerHTML = `✅ 搜尋結束，共找到 ${totalFound} 則相關評論。`;
+        return { exists: true, pageId, comments: found };
     }
 
-    function renderComments(list, item, container, parentBody = null) {
-        list.forEach(c => {
-            console.log(c)
-            const card = document.createElement('div');
-            card.className = 'comment-card' + (parentBody ? ' reply-card' : '');
-            
-            const isWT = (item.platform === 'webtoon' || item.platform === 'naver');
-            const isBest = isWT ? (c.isTop || c.isPinned) : !!c.is_best;
-            const name = isWT ? c.createdBy?.name : c.user_id;
-            const body = isWT ? c.body : c.content;
-            const dateStr = isWT ? c.createdAt : c.created;
-            const date = new Date(dateStr).toLocaleString();
-            
-            const metrics = getMetrics(c, item.platform);
-            
-            // 完美讀取作品名稱
-            const workTitle = escapeHtml(item.title ? `${item.title} (＃${item.volume})` : `作品 ID: ${item.id}`);
-
-            card.innerHTML = `
-                ${isBest ? '<div class="best-badge" style="z-index: 10;">BEST</div>' : ''}
-                
-                <div style="font-size: 0.85rem; color: #95a5a6; margin-bottom: 12px; font-weight: bold; display: flex; align-items: center; flex-wrap: wrap; gap: 6px;">
-                    <span class="platform-tag ${isWT ? 'wt-tag' : 'ridi-tag'}" style="margin-left: 0; padding: 3px 8px; font-size: 0.75rem; font-weight: bold; border-radius: 6px;">${escapeHtml(item.platform.toUpperCase())}</span>
-                    <span style="color: #f39c12; background: rgba(243, 156, 18, 0.1); padding: 2px 8px; border-radius: 4px;">${workTitle}</span>
-                </div>
-                
-
-                ${parentBody ? `<div class="reply-hint">⤴ 回覆留言：「${escapeHtml(parentBody.substring(0, 15))}...」</div>` : ''}
-                <div class="user-info">👤 ${escapeHtml(name)}</div>
-                <div class="content">${escapeHtml(body)}</div>
-                <div class="footer-metrics">
-                    <div class="metric-item">👍 ${metrics.likes}</div>
-                    ${isWT ? `<div class="metric-item">👎 ${metrics.dislikes}</div>` : ''}
-                    <div class="metric-item">💬 ${metrics.replies}</div>
-                    <div class="date">🕒 ${date}</div>
-                </div>
-            `;
-            container.appendChild(card);
+    // 把這次掃到的結果併回去；「已看過的回覆數」沿用舊的，用來算新回覆
+    function mergeEpisode(source, ep, result) {
+        const prev = source.episodes[ep];
+        const prevById = new Map((prev?.comments || []).map(c => [c.id, c]));
+        const comments = result.comments.map(c => {
+            const p = prevById.get(c.id);
+            return { ...c, seenReplies: p ? (p.seenReplies ?? p.replies) : c.replies };
         });
+        if (comments.length) {
+            source.episodes[ep] = { pageId: result.pageId, checkedAt: Date.now(), comments };
+        } else if (prev?.comments?.length) {
+            // 以前找得到、這次找不到：可能被刪除或改名，保留舊的並標記
+            source.episodes[ep] = { ...prev, checkedAt: Date.now(), missing: true };
+        } else {
+            delete source.episodes[ep];
+        }
     }
+
+    // ---------- 更新 ----------
+    let running = false;
+
+    function setProgress(text) {
+        document.getElementById('progress').hidden = false;
+        document.getElementById('progressText').textContent = `🔍 ${text}`;
+    }
+
+    function cancelRun() { cancelled = true; }
+
+    // full：重新檢查所有已知留言；range：只補掃某部作品的指定話數
+    async function runUpdate({ full = false, only = null, range = null } = {}) {
+        if (running) return;
+        const errors = [];
+        const sources = only ? tracker.sources.filter(s => s.id === only) : tracker.sources;
+        if (!sources.length) return alert('還沒有追蹤的作品，先到右上角 ⚙ 新增或匯入');
+        running = true;
+        cancelled = false;
+        document.getElementById('runBtn').disabled = true;
+        let found = 0;
+        try {
+            for (const source of sources) {
+                const label = PLATFORM_INFO[source.platform].label;
+                if (!tracker.usernames[source.platform]) { errors.push(`${source.name}：還沒設定 ${label} 帳號名稱`); continue; }
+                try {
+                    if (range) {
+                        for (let ep = range[0]; ep <= range[1]; ep++) {
+                            const res = await scanEpisode(source, ep, 'discover');
+                            if (!res.exists) break;
+                            mergeEpisode(source, ep, res);
+                            found += res.comments.length;
+                            source.lastScanned = Math.max(source.lastScanned || 0, ep);
+                            save();
+                        }
+                        continue;
+                    }
+                    // 1. 重新檢查已知有留言的話數（最近 60 天的，或 full 全部）
+                    const cutoff = Date.now() - RECHECK_DAYS * 864e5;
+                    const known = Object.keys(source.episodes).map(Number).sort((a, b) => a - b).filter(ep => {
+                        const e = source.episodes[ep];
+                        return full || e.pending || !e.comments.length || e.comments.some(c => (c.createdAt || 0) > cutoff);
+                    });
+                    for (const ep of known) {
+                        const pending = source.episodes[ep].pending;
+                        const res = await scanEpisode(source, ep, pending ? 'discover' : 'recheck');
+                        if (res.exists) mergeEpisode(source, ep, res);
+                        else if (pending) delete source.episodes[ep];
+                        found += res.comments?.length || 0;
+                        save();
+                        await sleep(REQUEST_GAP);
+                    }
+                    // 2. 往後找新話數
+                    for (let k = 0; k < tracker.newPerRun; k++) {
+                        const ep = (source.lastScanned || 0) + 1;
+                        const res = await scanEpisode(source, ep, 'discover');
+                        if (!res.exists) break;
+                        mergeEpisode(source, ep, res);
+                        found += res.comments.length;
+                        source.lastScanned = ep;
+                        save();
+                        await sleep(REQUEST_GAP);
+                    }
+                } catch (err) {
+                    if (err instanceof Cancelled) throw err;
+                    const msg = err.status === 404 && source.platform === 'ridi'
+                        ? '伺服器還沒更新（需要 push 讓 Render 重新部署）'
+                        : err.message === 'Failed to fetch' ? '連不上伺服器' : err.message;
+                    errors.push(`${source.name}：${msg}`);
+                }
+            }
+        } catch (err) {
+            if (!(err instanceof Cancelled)) errors.push(err.message);
+            else errors.push('已停止，已完成的部分都有存下來');
+        } finally {
+            running = false;
+            if (!only) tracker.lastRun = Date.now();
+            save();
+            document.getElementById('runBtn').disabled = false;
+            document.getElementById('progress').hidden = true;
+            const box = document.getElementById('runErrors');
+            box.hidden = !errors.length;
+            box.innerHTML = errors.map(e => `<div>⚠️ ${escapeHtml(e)}</div>`).join('');
+            render();
+        }
+    }
+
+    function rescanSource(id) {
+        const source = tracker.sources.find(s => s.id === id);
+        const input = prompt(`《${source.name}》要補掃第幾話？\n例如 40-45 或 12（一次最多 30 話）`);
+        if (!input) return;
+        const m = input.match(/^\s*(\d+)\s*(?:[-~～到]\s*(\d+))?\s*$/);
+        if (!m) return alert('格式不正確，請輸入例如 40-45');
+        const from = Number(m[1]), to = Math.min(Number(m[2] || m[1]), from + 29);
+        runUpdate({ only: id, range: [from, to] });
+    }
+
+    function markSeen(id) {
+        const source = tracker.sources.find(s => s.id === id);
+        Object.values(source.episodes).forEach(e => e.comments.forEach(c => { c.seenReplies = c.replies; }));
+        save();
+        render();
+    }
+
+    // ---------- 畫面 ----------
+    const newRepliesOf = c => c.kind === 'main' ? Math.max(0, (c.replies || 0) - (c.seenReplies ?? c.replies ?? 0)) : 0;
+
+    function sourceComments(source) {
+        return Object.entries(source.episodes)
+            .flatMap(([ep, e]) => e.comments.map(c => ({ ...c, ep: Number(ep), missing: e.missing })))
+            .sort((a, b) => b.ep - a.ep || (b.createdAt || 0) - (a.createdAt || 0));
+    }
+
+    function fmtDate(ms) {
+        if (!ms) return '';
+        const d = new Date(ms);
+        return `${d.getFullYear() !== new Date().getFullYear() ? d.getFullYear() + '/' : ''}${d.getMonth() + 1}/${d.getDate()}`;
+    }
+
+    function commentHtml(c, platform) {
+        const fresh = newRepliesOf(c);
+        return `
+            <div class="cmt ${fresh ? 'has-new' : ''}">
+                <div class="cmt-meta">
+                    <span class="ep-badge">第 ${c.ep} 話</span>
+                    ${c.best ? '<span class="best">BEST</span>' : ''}
+                    ${c.kind === 'reply' ? '<span>回覆別人</span>' : ''}
+                    <span>${fmtDate(c.createdAt)}</span>
+                </div>
+                ${c.kind === 'reply' ? `<div class="cmt-parent">↪ ${escapeHtml(c.parentName)}：${escapeHtml(c.parentBody)}</div>` : ''}
+                <div class="cmt-body">${escapeHtml(c.body)}</div>
+                <div class="cmt-metrics">
+                    <span>👍 ${c.likes}</span>
+                    ${platform !== 'ridi' ? `<span>👎 ${c.dislikes}</span>` : ''}
+                    ${c.kind === 'main' ? `<span>💬 ${c.replies}</span>` : ''}
+                    ${fresh ? `<span class="new">新回覆 ${fresh}</span>` : ''}
+                </div>
+                ${c.missing ? '<div class="cmt-missing">⚠️ 最近一次沒找到這則留言（可能被刪除或改了名字）</div>' : ''}
+                ${c.replyList?.length ? `
+                    <details class="reply-list" ${fresh ? 'open' : ''}>
+                        <summary>查看回覆（${c.replyList.length}）</summary>
+                        ${c.replyList.map(r => `<div class="reply"><b>${escapeHtml(r.name)}</b>${escapeHtml(r.body)}</div>`).join('')}
+                    </details>` : ''}
+            </div>`;
+    }
+
+    const expanded = new Set(); // 顯示全部留言的作品
+
+    function render() {
+        const all = tracker.sources.map(s => ({ s, comments: sourceComments(s) }));
+        const totalComments = all.reduce((n, x) => n + x.comments.length, 0);
+        const totalLikes = all.reduce((n, x) => n + x.comments.reduce((m, c) => m + (c.likes || 0), 0), 0);
+        const totalNew = all.reduce((n, x) => n + x.comments.reduce((m, c) => m + newRepliesOf(c), 0), 0);
+        document.getElementById('kpis').innerHTML = [
+            ['追蹤作品', tracker.sources.length], ['我的留言', totalComments], ['總讚數', totalLikes], ['新回覆', totalNew],
+        ].map(([label, v], k) => `<div class="kpi ${k === 3 && v ? 'highlight' : ''}"><div class="kpi-value">${v}</div><div class="kpi-label">${label}</div></div>`).join('');
+        document.getElementById('lastRun').textContent = tracker.lastRun ? `上次更新：${new Date(tracker.lastRun).toLocaleString()}` : '還沒更新過';
+
+        if (!tracker.sources.length) {
+            document.getElementById('sources').innerHTML = `
+                <div class="empty">還沒有追蹤的作品<br>按右上角 ⚙：填帳號名稱、貼作品網址，<br>或直接匯入以前的 database.json／queue.json</div>`;
+            return;
+        }
+        // 有新回覆的排前面，其次是最近有留言的
+        all.sort((a, b) => {
+            const na = a.comments.some(newRepliesOf), nb = b.comments.some(newRepliesOf);
+            return nb - na || (b.comments[0]?.createdAt || 0) - (a.comments[0]?.createdAt || 0);
+        });
+        document.getElementById('sources').innerHTML = all.map(({ s, comments }) => {
+            const fresh = comments.reduce((m, c) => m + newRepliesOf(c), 0);
+            const pending = Object.values(s.episodes).filter(e => e.pending).length;
+            const shown = expanded.has(s.id) ? comments : comments.slice(0, 5);
+            const info = PLATFORM_INFO[s.platform];
+            return `
+                <details class="source" ${fresh || expanded.has(s.id) ? 'open' : ''}>
+                    <summary>
+                        <div class="source-head">
+                            <span class="source-name">${escapeHtml(s.name)}</span>
+                            ${fresh ? `<span class="new-badge">新回覆 ${fresh}</span>` : ''}
+                            <span class="tag" style="--tag-color: ${info.color}">${info.label}</span>
+                        </div>
+                        <div class="source-sub">已掃到第 ${s.lastScanned || 0} 話 · 留言 ${comments.length} 則${pending ? ` · ${pending} 話待檢查` : ''}</div>
+                    </summary>
+                    <div class="source-body">
+                        ${comments.length ? shown.map(c => commentHtml(c, s.platform)).join('') : '<div class="empty" style="padding:16px;">還沒找到你的留言</div>'}
+                        ${comments.length > shown.length ? `<button class="show-more" onclick="expanded.add('${s.id}'); render();">顯示全部 ${comments.length} 則</button>` : ''}
+                        <div class="source-actions">
+                            ${fresh ? `<button class="btn btn-primary" onclick="markSeen('${s.id}')">新回覆都看過了</button>` : ''}
+                            <button class="btn" onclick="runUpdate({ only: '${s.id}' })">只更新這部</button>
+                            <button class="btn" onclick="rescanSource('${s.id}')">補掃話數</button>
+                            <button class="btn" onclick="openSettings('${s.id}')">編輯</button>
+                        </div>
+                    </div>
+                </details>`;
+        }).join('');
+    }
+
+    // ---------- 設定 ----------
+    function openSettings(focusId) {
+        document.querySelectorAll('[data-user]').forEach(el => { el.value = tracker.usernames[el.dataset.user] || ''; });
+        document.getElementById('newPerRun').value = tracker.newPerRun;
+        renderSourceEditors(focusId);
+        document.getElementById('settings').hidden = false;
+        document.getElementById('settingsBackdrop').hidden = false;
+        document.body.classList.add('no-scroll');
+        if (focusId) setTimeout(() => document.getElementById(`edit-${focusId}`)?.scrollIntoView({ block: 'center' }), 50);
+    }
+
+    function closeSettings() {
+        document.getElementById('settings').hidden = true;
+        document.getElementById('settingsBackdrop').hidden = true;
+        document.body.classList.remove('no-scroll');
+        render();
+    }
+
+    document.querySelectorAll('[data-user]').forEach(el => el.addEventListener('input', () => {
+        tracker.usernames[el.dataset.user] = el.value.trim();
+        save();
+    }));
+    document.getElementById('newPerRun').addEventListener('input', e => {
+        const n = parseInt(e.target.value);
+        if (n >= 1 && n <= 20) { tracker.newPerRun = n; save(); }
+    });
+
+    const addUrl = document.getElementById('addUrl');
+    addUrl.addEventListener('input', () => {
+        const p = parseSourceUrl(addUrl.value);
+        const box = document.getElementById('addDetect');
+        box.className = 'detect' + (p ? ' ok' : '');
+        box.textContent = !addUrl.value.trim() ? '' : p ? `✓ ${PLATFORM_INFO[p.platform].label}，作品編號 ${p.seriesId}` : '認不出這個網址，請貼 Webtoon、Naver 或 Ridi 的作品網址';
+    });
+
+    function addSourceFromForm() {
+        const p = parseSourceUrl(addUrl.value);
+        if (!p) return alert('認不出這個網址');
+        if (findSource(p.platform, p.seriesId)) return alert('這部已經在追蹤了');
+        const from = parseInt(document.getElementById('addFrom').value) || 0;
+        createSource({ ...p, name: document.getElementById('addName').value.trim(), url: addUrl.value.trim(), lastScanned: from });
+        save();
+        addUrl.value = '';
+        document.getElementById('addName').value = '';
+        document.getElementById('addFrom').value = '';
+        document.getElementById('addDetect').textContent = '';
+        renderSourceEditors();
+    }
+
+    function renderSourceEditors(flashId) {
+        document.getElementById('sourceEditors').innerHTML = tracker.sources.length ? tracker.sources.map(s => `
+            <div class="src-edit ${s.id === flashId ? 'flash' : ''}" id="edit-${s.id}">
+                <div class="src-edit-head">
+                    <span class="tag" style="--tag-color: ${PLATFORM_INFO[s.platform].color}">${PLATFORM_INFO[s.platform].label}</span>
+                    <input class="input" value="${escapeHtml(s.name)}" oninput="updateSource('${s.id}', 'name', this.value)" aria-label="顯示名稱">
+                    <button class="icon-btn" style="color: var(--danger);" onclick="removeSource('${s.id}')" aria-label="刪除">🗑</button>
+                </div>
+                <div class="src-edit-grid">
+                    <div><label>已掃到第幾話</label><input class="input" inputmode="numeric" value="${s.lastScanned || 0}" oninput="updateSource('${s.id}', 'lastScanned', this.value)"></div>
+                    ${s.platform === 'ridi' ? '<div></div>' : `<div><label>話數偏移（網址話數 − 實際話數）</label><input class="input" inputmode="numeric" value="${s.offset || 0}" oninput="updateSource('${s.id}', 'offset', this.value)"></div>`}
+                </div>
+            </div>`).join('') : '<div class="form-hint">還沒有作品</div>';
+    }
+
+    function updateSource(id, key, value) {
+        const s = tracker.sources.find(x => x.id === id);
+        if (key === 'name') s.name = value.trim() || s.name;
+        else if (/^-?\d+$/.test(value.trim())) s[key] = Number(value);
+        save();
+    }
+
+    function removeSource(id) {
+        const s = tracker.sources.find(x => x.id === id);
+        if (!confirm(`不再追蹤《${s.name}》？已找到的留言紀錄也會一起刪除。`)) return;
+        tracker.sources = tracker.sources.filter(x => x.id !== id);
+        save();
+        renderSourceEditors();
+    }
+
+    // 匯入以前手動維護的 database.json（作品清單）與 queue.json（有留言的話數）
+    function importLegacy(items) {
+        let added = 0, episodes = 0;
+        const withUrl = items.filter(it => it.url), queue = items.filter(it => it.id && it.volume);
+        withUrl.forEach(it => {
+            const p = parseSourceUrl(it.url);
+            if (!p || findSource(p.platform, p.seriesId)) return;
+            createSource({ ...p, name: it.title, url: it.url });
+            added++;
+        });
+        queue.forEach(it => {
+            const platform = it.platform;
+            if (!PLATFORM_INFO[platform]) return;
+            let source;
+            if (platform === 'ridi') {
+                source = tracker.sources.find(s => s.platform === 'ridi' && (s.name === it.title || s.ridiMap?.[it.volume] === String(it.id)))
+                    || createSource({ platform, seriesId: String(it.id), name: it.title });
+                source.ridiMap = { ...source.ridiMap, [it.volume]: String(it.id) };
+            } else {
+                const m = String(it.id).match(platform === 'naver' ? /^webtoon_(\d+)_\d+$/ : /^w_(\d+)_\d+$/);
+                if (!m) return;
+                source = findSource(platform, m[1]) || createSource({ platform, seriesId: m[1], name: it.title });
+            }
+            if (!source.episodes[it.volume]) { source.episodes[it.volume] = { pending: true, comments: [] }; episodes++; }
+            source.lastScanned = Math.max(source.lastScanned || 0, Number(it.volume));
+            if (it.targetName && !tracker.usernames[platform]) tracker.usernames[platform] = it.targetName;
+        });
+        save();
+        return { added, episodes };
+    }
+
+    document.getElementById('importPicker').addEventListener('change', async e => {
+        const files = Array.from(e.target.files);
+        e.target.value = '';
+        const items = [];
+        for (const f of files) {
+            try {
+                const data = JSON.parse(await f.text());
+                items.push(...(Array.isArray(data) ? data : [data]));
+            } catch (err) {
+                alert(`「${f.name}」不是有效的 JSON`);
+            }
+        }
+        const { added, episodes } = importLegacy(items);
+        alert(`匯入完成：新增 ${added} 部作品、${episodes} 個已知留言的話數。\n按「更新留言」就會開始抓。`);
+        openSettings();
+    });
+
+    render();
+    wakeServer();
 </script>
 </body>
 </html>

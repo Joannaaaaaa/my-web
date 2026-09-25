@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-5">
+    <link rel="stylesheet" href="common.css?v=20260926-6">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -610,7 +610,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260926-5"></script>
+<script src="common.js?v=20260926-6"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added', view: 'list' }, Store.loadUi());
@@ -1681,7 +1681,7 @@
             const blob = await CoverStore.get(r.coverId).catch(() => null);
             if (blob) covers[r.coverId] = await blobToDataUrl(blob);
         }
-        const packageData = { reviews: allReviews, memo: Store.loadMemo(), covers };
+        const packageData = { reviews: allReviews, memo: Store.loadMemo(), covers, commentTracker: Store.loadTracker() };
         const blob = new Blob([JSON.stringify(packageData, null, 2)], { type: 'application/json' });
         const now = new Date();
         const pad = n => String(n).padStart(2, '0');
@@ -1712,6 +1712,7 @@
                 if (!confirm(`「${file.name}」是完整備份（${count} 部）。\n匯入會取代目前的 ${allReviews.length} 部漫畫與備忘錄，確定嗎？`)) continue;
                 allReviews = imported.reviews || [];
                 Store.saveMemo(imported.memo || '');
+                if (imported.commentTracker) Store.saveTracker(imported.commentTracker);
                 await CoverStore.clear().catch(() => {});
                 for (const [id, dataUrl] of Object.entries(imported.covers || {})) {
                     const blob = await (await fetch(dataUrl)).blob();

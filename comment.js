@@ -82,7 +82,38 @@ app.get('/get-replies', async (req, res) => {
     }
 });
 
+// 讓前端先把 Render 從休眠叫醒
+app.get('/ping', (req, res) => res.json({ ok: true }));
 
+// Ridi 每一話是不同的 bookId，從作品頁的資料找出「第幾話 → bookId」對照
+// 回傳 [{ volume: 45, id: '4928005136' }, ...]；同一部作品快取一小時
+const ridiEpisodeCache = new Map();
+app.get('/ridi-episodes', async (req, res) => {
+    const { bookId } = req.query;
+    if (!/^\d+$/.test(bookId || '')) return res.status(400).send('bookId 格式錯誤');
+    const cached = ridiEpisodeCache.get(bookId);
+    if (cached && Date.now() - cached.at < 60 * 60 * 1000) return res.json(cached.episodes);
+    try {
+        // 用內建 fetch：Ridi 會擋 axios 的連線（同樣的標頭也回 403）
+        const page = await fetch(`https://ridibooks.com/books/${bookId}`, {
+            headers: { 'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148' },
+        });
+        if (!page.ok) throw new Error(`Ridi ${page.status}`);
+        const html = await page.text();
+        const re = /"id":"(\d{6,})","title":"(?:[^"\\]|\\.)*","series_title":(?:null|"(?:[^"\\]|\\.)*"),"author":(?:null|"(?:[^"\\]|\\.)*"),"genre":"[a-z]+","pub_id":"\d+","volume":"(\d+)"/g;
+        const byVolume = new Map();
+        let m;
+        while ((m = re.exec(html))) {
+            if (!byVolume.has(Number(m[2]))) byVolume.set(Number(m[2]), m[1]);
+        }
+        const episodes = [...byVolume].sort((a, b) => a[0] - b[0]).map(([volume, id]) => ({ volume, id }));
+        if (!episodes.length) return res.status(404).send('找不到話數資料');
+        ridiEpisodeCache.set(bookId, { at: Date.now(), episodes });
+        res.json(episodes);
+    } catch (error) {
+        res.status(500).send('抓取 Ridi 話數失敗');
+    }
+});
 
 // 讓 Render 或本機環境動態決定連接埠
 const PORT = process.env.PORT || 3000;
