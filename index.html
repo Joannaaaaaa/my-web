@@ -110,7 +110,7 @@
             display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: bold;
         }
         .read-check.on span { background: var(--status-ongoing); border-color: var(--status-ongoing); color: #fff; }
-        .day-item.read .day-item-title, .day-item.read .day-item-kr { opacity: 0.45; }
+        .day-item.read .day-item-title, .day-item.read .day-item-kr, .day-item.read .ep-badge { opacity: 0.45; }
         .day-item-progress { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 0.8rem; color: var(--text-sub); }
         .ep-plus {
             min-height: 30px; padding: 0 10px; border-radius: 15px; border: 1px solid var(--primary);
@@ -118,7 +118,16 @@
         }
         .ep-plus::after { content: ''; position: absolute; inset: -7px -4px; } /* 放大點擊範圍 */
         .ep-plus:active { background: rgba(52, 152, 219, 0.15); }
-        .ep-chip { font-size: 0.75rem; color: var(--text-sub); background: var(--raised); border-radius: 6px; padding: 2px 8px; white-space: nowrap; }
+        /* 話數標籤：貼在標題右邊 */
+        .ep-badge {
+            display: inline-block; flex-shrink: 0; margin-left: 6px; padding: 1px 7px; border-radius: 6px;
+            background: rgba(52, 152, 219, 0.18); color: #7cc4f2; font-size: 0.78rem; font-weight: bold;
+            line-height: 1.5; vertical-align: 0.12em; white-space: nowrap; font-variant-numeric: tabular-nums;
+        }
+        .detail-title .ep-badge { font-size: 0.95rem; vertical-align: 0.2em; }
+        /* 本週清單標題可換行，話數標籤接在標題後面 */
+        .title-line { font-weight: bold; line-height: 1.4; word-break: break-word; }
+        .title-line .day-item-title { display: inline; white-space: normal; }
 
         .toast {
             position: fixed; left: 16px; right: 16px; bottom: calc(140px + var(--safe-bottom)); z-index: 200;
@@ -666,12 +675,12 @@
                 <article class="review-card" role="button" tabindex="0" onclick="openDetail(${i})" onkeydown="if (event.key === 'Enter') openDetail(${i})">
                     <div class="card-top">
                         <div style="min-width:0;">
-                            <h3 class="comic-title">${escapeHtml(r.title || '未命名')}</h3>
+                            <h3 class="comic-title">${escapeHtml(r.title || '未命名')}${episodeBadgeHtml(r)}</h3>
                             ${r.krTitle ? `<div class="comic-kr-title">${escapeHtml(r.krTitle)}</div>` : ''}
                         </div>
                         <div class="card-stars">${starsText(r.rating)}</div>
                     </div>
-                    <div class="card-meta">${statusBadgeHtml(r)} ${episodeText(r) ? `<span class="ep-chip">${episodeText(r)}</span>` : ''} ${platformLinkTagsHtml(r)}</div>
+                    <div class="card-meta">${statusBadgeHtml(r)} ${platformLinkTagsHtml(r)}</div>
                     ${creators ? `<div class="card-creators">${creators}</div>` : ''}
                     ${relations ? `<div class="card-relations">${relations}</div>` : ''}
                     ${dates ? `<div class="card-dates">${dates}</div>` : ''}
@@ -714,7 +723,7 @@
                 <button class="read-check ${read ? 'on' : ''}" onclick="event.stopPropagation(); toggleRead(${i})" aria-label="${read ? '標為未讀' : '標為已讀'}" aria-pressed="${read}"><span>✓</span></button>
                 <div class="day-item-dots">${(r.platforms || []).map(p => `<span style="background: ${platformColor(p)}"></span>`).join('')}</div>
                 <div class="day-item-main">
-                    <div class="day-item-title">${escapeHtml(cleanTitleBrackets(r.title) || '未命名')}</div>
+                    <div class="title-line"><div class="day-item-title">${escapeHtml(cleanTitleBrackets(r.title) || '未命名')}</div>${episodeBadgeHtml(r)}</div>
                     ${r.krTitle ? `<div class="day-item-kr">${escapeHtml(r.krTitle)}</div>` : ''}
                     <div class="day-item-progress">${progressControlsHtml(r, i)}</div>
                 </div>
@@ -805,9 +814,13 @@
     }
 
     // ---------- 閱讀進度 ----------
+    function episodeBadgeHtml(r) {
+        return Number.isInteger(r.episode) ? `<span class="ep-badge">${r.episode}話</span>` : '';
+    }
+
     function progressControlsHtml(r, i) {
         return Number.isInteger(r.episode)
-            ? `<span>${episodeText(r)}</span><button class="ep-plus" onclick="event.stopPropagation(); addEpisode(${i})">+1 話</button>`
+            ? `<button class="ep-plus" onclick="event.stopPropagation(); addEpisode(${i})">+1 話</button>`
             : `<button class="ep-plus" onclick="event.stopPropagation(); addEpisode(${i})">記錄話數</button>`;
     }
 
@@ -1136,7 +1149,7 @@
 
         document.getElementById('detailHeaderTitle').textContent = r.title || '未命名';
         document.getElementById('viewModeArea').innerHTML = `
-            <h2 class="detail-title">${escapeHtml(r.title || '未命名')}</h2>
+            <h2 class="detail-title">${escapeHtml(r.title || '未命名')}${episodeBadgeHtml(r)}</h2>
             ${r.krTitle ? `<div class="detail-kr">원제: ${escapeHtml(r.krTitle)}</div>` : ''}
             <div class="detail-meta">${statusBadgeHtml(r)} ${openLinks ? '' : platformTagsHtml(r.platforms)}</div>
             ${openLinks ? `<div class="open-links">${openLinks}</div>` : ''}
