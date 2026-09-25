@@ -185,6 +185,30 @@
         .chart-chips::-webkit-scrollbar { display: none; }
         .chart-chips .chip { min-height: 34px; font-size: 0.8rem; border-width: 1px; flex-shrink: 0; }
         .chart-chips .chip.selected { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: none; }
+        .kpi-grid.three { grid-template-columns: repeat(3, 1fr); margin: 0 0 14px; }
+        .kpi-grid.three .kpi { background: var(--raised); border: none; padding: 10px 12px; }
+        .kpi-grid.three .kpi-value { font-size: 1.4rem; }
+        .year-section-title { font-size: 0.85rem; color: var(--text-muted); font-weight: bold; margin: 18px 0 8px; }
+        .month-chart { display: grid; grid-template-columns: repeat(12, 1fr); gap: 2px; height: 130px; align-items: end; }
+        .month-col {
+            height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
+            border: none; background: none; padding: 0; cursor: pointer; font: inherit;
+        }
+        .month-value { font-size: 0.7rem; color: var(--text-sub); min-height: 16px; font-variant-numeric: tabular-nums; }
+        .month-bar { width: 100%; max-width: 20px; border-radius: 4px 4px 0 0; background: var(--status-completed); min-height: 0; }
+        .month-col.dim .month-bar { opacity: 0.35; }
+        .month-axis { display: grid; grid-template-columns: repeat(12, 1fr); gap: 2px; border-top: 1px solid var(--border); margin-top: 0; }
+        .month-axis span { text-align: center; font-size: 0.68rem; color: var(--text-muted); padding-top: 4px; }
+        .rank-list { display: flex; flex-direction: column; }
+        .rank-item {
+            display: flex; align-items: center; gap: 10px; min-height: 44px; border: none; background: none; width: 100%;
+            color: var(--text); font: inherit; text-align: left; cursor: pointer; padding: 0 2px; border-bottom: 1px solid var(--border);
+        }
+        .rank-item:last-child { border-bottom: none; }
+        .rank-item:active { background: var(--raised); }
+        .rank-no { width: 18px; color: var(--text-muted); font-size: 0.8rem; text-align: center; font-variant-numeric: tabular-nums; }
+        .rank-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .rank-count { color: var(--text-sub); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
         .table-details summary { cursor: pointer; color: var(--text-muted); font-size: 0.85rem; padding: 12px 0 4px; min-height: 44px; }
         .table-details .table-scroll + .table-scroll { margin-top: 12px; }
 
@@ -353,6 +377,11 @@
     <!-- 統計 -->
     <section class="tab-panel" id="tab-stats">
         <div class="kpi-grid" id="kpiGrid"></div>
+        <div class="panel" id="yearPanel">
+            <div class="panel-title">🗓 年度回顧</div>
+            <div class="chart-chips" id="yearChips"></div>
+            <div id="yearContent"></div>
+        </div>
         <div class="panel">
             <div class="panel-title">各平台閱讀狀態</div>
             <div class="panel-sub">一部作品在多個平台時，每個平台都會算一次</div>
@@ -862,6 +891,7 @@
 
     function renderStats() {
         renderKpis();
+        renderYearReview();
         renderStatusChart();
         renderRatingChart();
         renderStatsTables();
@@ -952,19 +982,106 @@
     }
 
     // 點（或滑過）長條時，在下方顯示數字並淡化其他色塊
+    const TIP_TARGETS = '.bar-seg, .month-col';
     function highlightSegment(seg) {
         const panel = seg.closest('.panel');
-        panel.querySelectorAll('.bar-seg').forEach(b => b.classList.toggle('dim', b !== seg));
-        panel.querySelector('.chart-info').textContent = seg.dataset.tip;
+        const sameKind = seg.classList.contains('month-col') ? '.month-col' : '.bar-seg';
+        panel.querySelectorAll(TIP_TARGETS).forEach(b => b.classList.toggle('dim', b.matches(sameKind) && b !== seg));
+        const info = panel.querySelector('.chart-info');
+        if (info) info.textContent = seg.dataset.tip;
     }
     document.getElementById('tab-stats').addEventListener('click', e => {
-        const seg = e.target.closest('.bar-seg');
+        const seg = e.target.closest(TIP_TARGETS);
         if (seg) highlightSegment(seg);
     });
     document.getElementById('tab-stats').addEventListener('mouseover', e => {
-        const seg = e.target.closest('.bar-seg');
+        const seg = e.target.closest(TIP_TARGETS);
         if (seg && matchMedia('(hover: hover)').matches) highlightSegment(seg);
     });
+
+    // ---------- 年度回顧 ----------
+    // 「看完」= 狀態為已看完且結束日在該年；「開始追」= 開始日在該年
+    const CREATOR_ROLES = ['author', 'adapter', 'storyboard', 'artist'];
+    let reviewYear = null;
+
+    function yearOf(dateStr) { return (dateStr || '').slice(0, 4); }
+
+    function renderYearReview() {
+        const years = [...new Set(allReviews.flatMap(r => [yearOf(r.startDate), yearOf(r.endDate)]).filter(Boolean))].sort().reverse();
+        const content = document.getElementById('yearContent');
+        if (!years.length) {
+            document.getElementById('yearChips').innerHTML = '';
+            content.innerHTML = '<div class="chart-empty">填寫開始／結束日期後，這裡會出現年度回顧</div>';
+            return;
+        }
+        const thisYear = String(new Date().getFullYear());
+        if (!years.includes(reviewYear)) reviewYear = years.includes(thisYear) ? thisYear : years[0];
+        document.getElementById('yearChips').innerHTML = years.map(y =>
+            `<button class="chip ${y === reviewYear ? 'selected' : ''}" onclick="setReviewYear('${y}')">${y}</button>`).join('');
+
+        const finished = allReviews.map((r, i) => ({ r, i })).filter(({ r }) => statusOf(r) === '已看完' && yearOf(r.endDate) === reviewYear);
+        const started = allReviews.filter(r => yearOf(r.startDate) === reviewYear);
+        const yearWorks = allReviews.filter(r => yearOf(r.startDate) === reviewYear || yearOf(r.endDate) === reviewYear);
+        const rated = finished.filter(({ r }) => parseInt(r.rating) > 0);
+        const avg = rated.length ? (rated.reduce((s, { r }) => s + parseInt(r.rating), 0) / rated.length).toFixed(1) : '–';
+
+        // 每月看完
+        const months = Array.from({ length: 12 }, (_, m) => finished.filter(({ r }) => parseInt(r.endDate.slice(5, 7)) === m + 1).length);
+        const maxMonth = Math.max(...months);
+        const monthChart = maxMonth ? `
+            <div class="month-chart">${months.map((n, m) => `
+                <button class="month-col" data-tip="${m + 1} 月看完 ${n} 部" aria-label="${m + 1} 月看完 ${n} 部">
+                    <span class="month-value">${n || ''}</span>
+                    <span class="month-bar" style="height: ${n / maxMonth * 100}px;"></span>
+                </button>`).join('')}
+            </div>
+            <div class="month-axis">${months.map((_, m) => `<span>${m + 1}</span>`).join('')}</div>
+            <div class="chart-info">點長條查看每月看完幾部</div>` : '<div class="chart-empty">這一年還沒有看完的作品</div>';
+
+        // 最常看的平台（當年開始或看完的作品）
+        const platformCounts = PLATFORMS.map(p => ({ p, n: yearWorks.filter(r => (r.platforms || []).includes(p)).length }))
+            .filter(x => x.n).sort((a, b) => b.n - a.n);
+        const maxP = platformCounts[0]?.n || 0;
+        const platformBars = platformCounts.map(({ p, n }) =>
+            barRowHtml(PLATFORM_CONFIG[p].short, [{ value: n, color: platformColor(p), tip: `${p}：${n} 部` }], maxP)).join('');
+
+        // 最常看的創作者
+        const creatorCounts = {};
+        yearWorks.forEach(r => {
+            const names = new Set(CREATOR_ROLES.flatMap(k => splitNames(r[k])));
+            names.forEach(n => { creatorCounts[n] = (creatorCounts[n] || 0) + 1; });
+        });
+        const topCreators = Object.entries(creatorCounts).filter(([, n]) => n > 1)
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5);
+
+        const favorites = finished.filter(({ r }) => parseInt(r.rating) === 5);
+
+        content.innerHTML = `
+            <div class="kpi-grid three">
+                <div class="kpi"><div class="kpi-label">看完</div><div class="kpi-value">${finished.length}<small>部</small></div></div>
+                <div class="kpi"><div class="kpi-label">開始追</div><div class="kpi-value">${started.length}<small>部</small></div></div>
+                <div class="kpi"><div class="kpi-label">看完的平均</div><div class="kpi-value">${avg}<small>${rated.length ? '★' : ''}</small></div></div>
+            </div>
+            <div class="year-section-title">每月看完</div>
+            ${monthChart}
+            ${platformBars ? `<div class="year-section-title">最常看的平台</div>${platformBars}` : ''}
+            ${topCreators.length ? `<div class="year-section-title">最常看的創作者</div>
+                <div class="rank-list">${topCreators.map(([name, n], k) => `
+                    <button class="rank-item" data-creator="${escapeHtml(name)}" onclick="openCreator(this.dataset.creator)">
+                        <span class="rank-no">${k + 1}</span><span class="rank-name">${escapeHtml(name)}</span><span class="rank-count">${n} 部 ›</span>
+                    </button>`).join('')}</div>` : ''}
+            ${favorites.length ? `<div class="year-section-title">年度 5 星作品</div>
+                <div class="rank-list">${favorites.map(({ r, i }) => `
+                    <button class="rank-item" onclick="openDetail(${i})">
+                        <span class="rank-no" style="color: var(--star);">★</span><span class="rank-name">${escapeHtml(r.title || '未命名')}</span><span class="rank-count">›</span>
+                    </button>`).join('')}</div>` : ''}
+        `;
+    }
+
+    function setReviewYear(y) {
+        reviewYear = y;
+        renderYearReview();
+    }
 
     function renderStatsTables() {
         const head = `<tr><th></th>${PLATFORMS.map(p => `<th>${PLATFORM_CONFIG[p].short}</th>`).join('')}</tr>`;
