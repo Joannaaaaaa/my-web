@@ -279,6 +279,21 @@
         .creator-list { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 0.92rem; }
         .creator-list dt { color: var(--text-muted); white-space: nowrap; }
         .creator-list dd { margin: 0; color: var(--text); }
+        .creator-name {
+            border: none; background: none; padding: 2px 0; margin-right: 2px; font: inherit; color: var(--text); cursor: pointer;
+            text-decoration: underline; text-decoration-color: #4a5160; text-underline-offset: 3px;
+        }
+        .creator-name:active { color: var(--primary); }
+        .creator-summary { color: var(--text-sub); font-size: 0.9rem; margin: 4px 0 12px; }
+        .role-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+        .role-chip { font-size: 0.8rem; background: var(--raised); border-radius: 6px; padding: 4px 10px; color: var(--text-sub); }
+        .role-chip b { color: var(--text); margin-left: 4px; }
+        .work-row { display: flex; gap: 12px; align-items: center; padding: 12px 2px; border-bottom: 1px solid var(--border); cursor: pointer; }
+        .work-row:last-child { border-bottom: none; }
+        .work-row:active { background: var(--raised); }
+        .work-main { flex: 1; min-width: 0; }
+        .work-roles { font-size: 0.78rem; color: #58b6ec; margin-top: 4px; }
+        .work-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
         .relation-group { margin-bottom: 10px; font-size: 0.9rem; }
         .relation-group .label { color: #58b6ec; font-weight: bold; margin-right: 4px; }
         .relation-link { border: none; background: rgba(88, 182, 236, 0.12); color: #9fd4f5; border-radius: 6px; padding: 4px 8px; margin: 3px 4px 3px 0; font-size: 0.85rem; cursor: pointer; }
@@ -411,6 +426,15 @@
     </div>
 </div>
 
+<!-- 創作者頁 -->
+<div class="fullsheet" id="creatorSheet">
+    <div class="fullsheet-header">
+        <button class="icon-btn" onclick="Sheets.closeTop()" aria-label="關閉">✕</button>
+        <div class="sheet-title" id="creatorHeaderTitle"></div>
+    </div>
+    <div class="fullsheet-body" id="creatorBody"></div>
+</div>
+
 <!-- 作品詳細 / 編輯 -->
 <div class="fullsheet" id="detailSheet">
     <div class="fullsheet-header">
@@ -463,7 +487,9 @@
             this.show(id, false);
         },
         show(id, visible) {
-            document.getElementById(id).classList.toggle('open', visible);
+            const el = document.getElementById(id);
+            el.classList.toggle('open', visible);
+            el.style.zIndex = visible ? 100 + this.stack.indexOf(id) : ''; // 後開的疊在上面
             const anyBottomSheet = this.stack.some(s => document.getElementById(s).classList.contains('sheet'));
             document.getElementById('backdrop').classList.toggle('open', anyBottomSheet || (this.stack.length > 0 && window.innerWidth >= 700));
             document.body.classList.toggle('no-scroll', this.stack.length > 0);
@@ -977,7 +1003,7 @@
     function renderDetailView(index) {
         const r = allReviews[index];
         const creators = JOB_KEYS.filter(j => (r[j.key] || '').trim())
-            .map(j => `<dt>${j.label}</dt><dd>${escapeHtml(r[j.key].trim())}</dd>`).join('');
+            .map(j => `<dt>${j.label}</dt><dd>${creatorLinksHtml(r[j.key])}</dd>`).join('');
         const relations = findRelations(r).map(g => `
             <div class="relation-group"><span class="label">${g.label}</span>
                 ${g.matches.map(m => `<button class="relation-link" onclick="openDetail(${m.index}, true)">${escapeHtml(m.title)}</button>`).join('')}
@@ -1008,6 +1034,58 @@
             ${creators ? `<dl class="creator-list">${creators}</dl>` : '<div style="color:#555;">未填寫創作者資訊</div>'}
             ${relations ? `<div class="detail-section-title">合作過的其他作品</div>${relations}` : ''}
         `;
+    }
+
+    // ---------- 創作者頁 ----------
+    function creatorLinksHtml(value) {
+        return splitNames(value).map(name =>
+            `<button class="creator-name" data-creator="${escapeHtml(name)}" onclick="openCreator(this.dataset.creator)">${escapeHtml(name)}</button>`).join('、');
+    }
+
+    function worksByCreator(name) {
+        return allReviews.map((r, i) => ({ r, i, roles: JOB_KEYS.filter(j => splitNames(r[j.key]).includes(name)).map(j => j.label) }))
+            .filter(w => w.roles.length);
+    }
+
+    function openCreator(name) {
+        const works = worksByCreator(name);
+        const rated = works.filter(w => parseInt(w.r.rating) > 0);
+        const avg = rated.length ? (rated.reduce((s, w) => s + parseInt(w.r.rating), 0) / rated.length).toFixed(1) : null;
+        const roleCounts = {};
+        works.forEach(w => w.roles.forEach(role => { roleCounts[role] = (roleCounts[role] || 0) + 1; }));
+
+        document.getElementById('creatorHeaderTitle').textContent = name;
+        document.getElementById('creatorBody').innerHTML = `
+            <h2 class="detail-title">${escapeHtml(name)}</h2>
+            <div class="creator-summary">參與 ${works.length} 部作品${avg ? `・平均評分 ${avg}` : ''}</div>
+            <div class="role-chips">${Object.entries(roleCounts).map(([role, n]) => `<span class="role-chip">${role}<b>${n}</b></span>`).join('')}</div>
+            ${works.map(({ r, i, roles }) => `
+                <div class="work-row" role="button" tabindex="0" onclick="openWorkFromCreator(${i})">
+                    <div class="work-main">
+                        <div class="day-item-title">${escapeHtml(r.title || '未命名')}</div>
+                        ${r.krTitle ? `<div class="day-item-kr">${escapeHtml(r.krTitle)}</div>` : ''}
+                        <div class="work-roles">${roles.join('・')}</div>
+                    </div>
+                    <div class="work-side">${statusBadgeHtml(r)}<span class="card-stars">${starsText(r.rating)}</span></div>
+                </div>`).join('')}
+        `;
+        document.getElementById('creatorBody').scrollTop = 0;
+        // 創作者頁已在下層（創作者 → 作品 → 另一位創作者）：更新內容後退回那一層
+        if (Sheets.stack.includes('creatorSheet')) {
+            if (Sheets.stack[Sheets.stack.length - 1] !== 'creatorSheet') Sheets.closeTop();
+        } else {
+            Sheets.open('creatorSheet');
+        }
+    }
+
+    // 從創作者頁點作品：詳細頁已在下層就換成該作品並回到它，否則在上層打開
+    function openWorkFromCreator(i) {
+        if (Sheets.stack.includes('detailSheet')) {
+            openDetail(i, true);
+            Sheets.closeTop();
+        } else {
+            openDetail(i);
+        }
     }
 
     function openDetail(index, replace = false) {
