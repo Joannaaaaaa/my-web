@@ -56,6 +56,22 @@
         /* 作品卡片 */
         .gallery-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
         @media (min-width: 700px) { .gallery-grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; } }
+
+        /* 封面牆 */
+        .gallery-grid.cover-wall { grid-template-columns: repeat(3, 1fr); gap: 14px 10px; }
+        @media (min-width: 700px) { .gallery-grid.cover-wall { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); } }
+        .wall-tile { cursor: pointer; min-width: 0; }
+        .wall-tile:active { opacity: 0.8; }
+        .wall-cover { position: relative; }
+        .cover-fill { width: 100%; height: auto; aspect-ratio: 3 / 4; font-size: 2.2rem; border-radius: 8px; }
+        .wall-status { position: absolute; left: 4px; top: 4px; font-size: 0.66rem; padding: 1px 6px; border-radius: 5px; }
+        .wall-backlog { position: absolute; right: 4px; top: 4px; font-size: 0.66rem; font-weight: bold; padding: 1px 6px; border-radius: 5px; background: #c8641a; color: #fff; }
+        .wall-title {
+            margin-top: 6px; font-size: 0.82rem; font-weight: bold; line-height: 1.35;
+            display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .wall-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .view-btn { font-size: 1rem; }
         .review-card {
             background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
             padding: 12px 14px; cursor: pointer; text-align: left; color: inherit; font: inherit; width: 100%;
@@ -387,6 +403,7 @@
                     <input type="search" id="searchInput" class="input" placeholder="搜尋作品、創作者、評論" oninput="renderList()" enterkeyhint="search">
                     <button class="clear-btn" id="searchClear" onclick="clearSearch()" aria-label="清除搜尋" hidden>✕</button>
                 </div>
+                <button class="filter-btn view-btn" id="viewBtn" onclick="toggleView()" aria-label="切換清單／封面牆">▦</button>
                 <button class="filter-btn" id="filterBtn" onclick="Sheets.open('filterSheet')" aria-label="篩選與排序">⇅<span class="dot"></span></button>
             </div>
             <div class="status-scroller" id="statusChips"></div>
@@ -584,7 +601,7 @@
 <script src="common.js?v=20260926-4"></script>
 <script>
     let allReviews = Store.loadReviews();
-    const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added' }, Store.loadUi());
+    const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added', view: 'list' }, Store.loadUi());
     let currentEditIndex = -1;
     let isEditMode = false;
 
@@ -761,7 +778,19 @@
             : `共 ${allReviews.length} 部`;
         document.getElementById('totalCount').textContent = allReviews.length ? `${allReviews.length} 部` : '';
 
-        document.getElementById('gallery').innerHTML = indexes.map(i => {
+        const gallery = document.getElementById('gallery');
+        const wall = ui.view === 'grid';
+        gallery.classList.toggle('cover-wall', wall);
+        const viewBtn = document.getElementById('viewBtn');
+        viewBtn.textContent = wall ? '☰' : '▦';
+        viewBtn.setAttribute('aria-label', wall ? '切換成清單' : '切換成封面牆');
+        document.getElementById('emptyMsg').hidden = indexes.length > 0;
+        if (wall) {
+            gallery.innerHTML = indexes.map(i => wallTileHtml(allReviews[i], i)).join('');
+            return;
+        }
+
+        gallery.innerHTML = indexes.map(i => {
             const r = allReviews[i];
             const dates = [r.startDate && `시작 ${escapeHtml(r.startDate)}`, r.endDate && `끝 ${escapeHtml(r.endDate)}`].filter(Boolean).join('　');
             const creators = creatorsSummary(r);
@@ -786,7 +815,30 @@
                     </div>
                 </article>`;
         }).join('');
-        document.getElementById('emptyMsg').hidden = indexes.length > 0;
+    }
+
+    // 封面牆的一格：封面（左上狀態、右上待補）＋標題＋話數
+    const STATUS_SHORT = { '連載中': '連載', '已看完': '看完', '休刊': '休刊', '棄坑': '棄坑', '想看': '想看' };
+    function wallTileHtml(r, i) {
+        const status = STATUS_CONFIG[r.status] ? r.status : DEFAULT_STATUS;
+        const backlog = backlogOf(r);
+        const sub = [status === DEFAULT_STATUS && DAY_MAP[r.updateDay] ? DAY_MAP[r.updateDay] : '', episodeLabel(r.episode)].filter(Boolean).join(' · ');
+        return `
+            <article class="wall-tile" role="button" tabindex="0" onclick="openDetail(${i})" onkeydown="if (event.key === 'Enter') openDetail(${i})">
+                <div class="wall-cover">
+                    ${coverHtml(r, coverUrlOf(r), 'fill')}
+                    <span class="status-badge wall-status ${STATUS_CONFIG[status].cls}">${STATUS_SHORT[status]}</span>
+                    ${backlog ? `<span class="wall-backlog">待補 ${backlog}</span>` : ''}
+                </div>
+                <div class="wall-title">${escapeHtml(r.title || '未命名')}</div>
+                ${sub ? `<div class="wall-sub">${escapeHtml(sub)}</div>` : ''}
+            </article>`;
+    }
+
+    function toggleView() {
+        ui.view = ui.view === 'grid' ? 'list' : 'grid';
+        Store.saveUi(ui);
+        renderList();
     }
 
     // ---------- 本週更新 ----------
