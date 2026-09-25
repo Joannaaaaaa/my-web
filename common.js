@@ -14,6 +14,7 @@ const STATUS_CONFIG = {
     "已看完": { cls: "status-completed", color: "var(--status-completed)" },
     "休刊": { cls: "status-paused", color: "var(--status-paused)" },
     "棄坑": { cls: "status-dropped", color: "var(--status-dropped)" },
+    "想看": { cls: "status-wishlist", color: "var(--status-wishlist)" },
 };
 const STATUSES = Object.keys(STATUS_CONFIG);
 const DEFAULT_STATUS = "連載中";

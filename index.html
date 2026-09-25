@@ -625,8 +625,8 @@
     })();
 
     // ---------- 統計 ----------
-    // 堆疊順序讓相鄰色塊在色盲下也能區分（紫色的休刊不緊鄰藍色的已看完）
-    const CHART_STATUS_ORDER = ['連載中', '已看完', '棄坑', '休刊'];
+    // 堆疊順序讓相鄰色塊在色盲下也能區分（紫色的休刊不緊鄰藍色的已看完、粉紅的想看不緊鄰綠色的連載中）
+    const CHART_STATUS_ORDER = ['連載中', '已看完', '想看', '棄坑', '休刊'];
     let ratingPlatform = 'all';
 
     const statusOf = r => STATUS_CONFIG[r.status] ? r.status : DEFAULT_STATUS;

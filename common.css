@@ -16,6 +16,7 @@
     --status-completed: #2d7dd2;
     --status-paused: #8a70c8;
     --status-dropped: #c8641a;
+    --status-wishlist: #c2548f;
     --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
@@ -54,6 +55,7 @@ button { font-family: inherit; }
 .status-completed { background: var(--status-completed); }
 .status-paused { background: var(--status-paused); }
 .status-dropped { background: var(--status-dropped); }
+.status-wishlist { background: var(--status-wishlist); }
 .tag {
     display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: bold;
     background: rgba(0, 0, 0, 0.4); border: 1px solid var(--tag-color, #ccc); color: var(--tag-color, #ccc);
