@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-18">
+    <link rel="stylesheet" href="common.css?v=20260926-19">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -382,6 +382,21 @@
         .help table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 6px 0; }
         .help th, .help td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
         .help td:first-child { white-space: nowrap; color: var(--text); }
+        .activity-seg { display: flex; gap: 4px; padding: 4px; margin: 12px 0; border-radius: 12px; background: var(--raised); }
+        .activity-seg button { flex: 1; min-height: 40px; border: none; border-radius: 9px; background: none; color: var(--text-sub); font: inherit; font-weight: bold; cursor: pointer; }
+        .activity-seg button.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); }
+        .act-day { margin-bottom: 14px; }
+        .act-day-title { position: sticky; top: 0; z-index: 1; padding: 6px 2px; font-size: 0.82rem; font-weight: bold; color: var(--text-sub); background: var(--bg); }
+        .act-item { display: flex; gap: 10px; align-items: flex-start; width: 100%; padding: 10px 12px; margin-bottom: 6px; text-align: left;
+            border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; }
+        button.act-item { cursor: pointer; }
+        .act-icon { flex-shrink: 0; width: 22px; text-align: center; }
+        .act-main { flex: 1; min-width: 0; }
+        .act-title { display: block; font-weight: bold; overflow-wrap: anywhere; }
+        .act-text { display: block; font-size: 0.85rem; color: var(--text-sub); overflow-wrap: anywhere; }
+        .act-time { flex-shrink: 0; font-size: 0.75rem; color: var(--text-muted); }
+        .act-empty { padding: 40px 16px; text-align: center; color: var(--text-muted); line-height: 1.7; }
+        .act-more { width: 100%; margin: 4px 0 16px; }
         .sync-intro { color: var(--text-sub); font-size: 0.88rem; line-height: 1.7; margin: 0 0 12px; }
         .cleanup-notes { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; }
         .cleanup-notes li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -469,6 +484,14 @@
     </section>
 
     <!-- 統計 -->
+    <section class="tab-panel" id="tab-activity">
+        <div class="activity-seg" role="tablist" aria-label="動態種類">
+            <button role="tab" data-src="platform" onclick="setActivitySrc('platform')">平台動態</button>
+            <button role="tab" data-src="me" onclick="setActivitySrc('me')">我的紀錄</button>
+        </div>
+        <div id="activityList"></div>
+    </section>
+
     <section class="tab-panel" id="tab-stats">
         <div class="kpi-grid" id="kpiGrid"></div>
         <div class="panel" id="yearPanel">
@@ -502,6 +525,7 @@
 <nav class="tab-bar">
     <button data-tab="list" onclick="switchTab('list')"><span class="tab-icon">📚</span>作品</button>
     <button data-tab="weekly" onclick="switchTab('weekly')"><span class="tab-icon">📅</span>本週</button>
+    <button data-tab="activity" onclick="switchTab('activity')"><span class="tab-icon">🕘</span>動態</button>
     <button data-tab="stats" onclick="switchTab('stats')"><span class="tab-icon">📊</span>統計</button>
 </nav>
 
@@ -645,6 +669,18 @@
         </details>
 
         <details>
+            <summary>動態（下方分頁）</summary>
+            <div class="help-body">
+                <ul>
+                    <li>依日期分組、新的在上面；點一筆會打開那部作品（已刪除的作品點不開）。</li>
+                    <li><b>平台動態</b>：每天自動檢查、「更新平台資料」找到的變化 — 出了新話數、休刊回歸、平台完結。新話數是跟上次從平台查到的數字比，每週 +1 的推算不算。</li>
+                    <li><b>我的紀錄</b>：看到第幾話（同一部同一天合併成一筆，例如 40話 → 43話）、本週已讀、狀態、評分、寫筆記、新增／刪除作品。</li>
+                    <li>保留 2 年（最多 5000 筆），會一起放進備份檔。從這個功能加入之後才開始記錄，以前的沒辦法補。</li>
+                </ul>
+            </div>
+        </details>
+
+        <details>
             <summary>從平台自動填入（編輯頁）</summary>
             <div class="help-body">
                 <ul>
@@ -702,7 +738,7 @@
             <div class="help-body">
                 <ul>
                     <li>資料<b>只存在這支手機的這個瀏覽器</b>裡（每個網址分開），不會上傳到任何地方。</li>
-                    <li>「💾 下載備份」會存成一個檔案，包含所有作品、封面、備忘錄和平台留言；換手機或清除資料後用「📤 匯入備份」還原。</li>
+                    <li>「💾 下載備份」會存成一個檔案，包含所有作品、封面、備忘錄、動態紀錄和平台留言；換手機或清除資料後用「📤 匯入備份」還原。</li>
                     <li>備份提醒：上次備份後<b>有改過資料、而且超過 7 天</b>才會提醒（從沒備份過也會提醒）。</li>
                     <li>「🧹 整理舊資料」：把舊格式（標題括號裡的話數、心得裡的日期）整理成新格式，套用前會先自動下載一份備份。</li>
                 </ul>
@@ -792,7 +828,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260926-18"></script>
+<script src="common.js?v=20260926-19"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added', view: 'list' }, Store.loadUi());
@@ -1203,6 +1239,7 @@
         freezeLatest(r); // 從今天開始重新自動 +1，休刊期間不算
         r.status = DEFAULT_STATUS;
         Object.assign(r, { returnText: '', returnFrom: '', returnTo: '' });
+        ActivityLog.add('me', 'status', r, { from: '休刊', to: DEFAULT_STATUS });
         Store.saveReviews(allReviews);
         renderAll();
         openDetail(i);
@@ -1246,9 +1283,13 @@
             r.latest = { n: ep[latest.part], part: latest.part, asOf: toDateStr(new Date()) };
         }
         saveProgress();
+        const fromLabel = episodeLabel(before.episode), toLabel = episodeLabel(r.episode);
+        ActivityLog.progress(r, fromLabel, toLabel);
         showToast(`《${cleanTitleBrackets(r.title)}》${episodeText(r)}`, () => {
             Object.assign(r, before);
             saveProgress();
+            ActivityLog.progress(r, toLabel, fromLabel);
+            renderActivity();
         }, { label: '寫心得', fn: () => openNoteEditor(i) });
     }
 
@@ -1256,6 +1297,7 @@
         const r = allReviews[i];
         r.lastReadDate = isReadThisWeek(r) ? '' : weekDateOf(r.updateDay);
         saveProgress();
+        ActivityLog.read(r, isReadThisWeek(r));
     }
 
     // 進度變更不算「編輯」，所以不更新 updatedAt（避免打亂「最近編輯」排序）
@@ -1263,6 +1305,7 @@
         Store.saveReviews(allReviews);
         renderList();
         renderWeekly();
+        renderActivity();
         if (currentEditIndex >= 0 && document.getElementById('detailSheet').classList.contains('open') && !isEditMode) {
             renderDetailView(currentEditIndex);
         }
@@ -1669,12 +1712,16 @@
         if (!note.text && note.from == null) return alert('請輸入心得或話數');
         r.notes = [...(r.notes || [])];
         if (noteTarget.noteIndex != null) r.notes[noteTarget.noteIndex] = note;
-        else r.notes.push(note);
+        else {
+            r.notes.push(note);
+            ActivityLog.add('me', 'note', r, { range: noteEpisodeLabel(note) || '' });
+        }
         // 依日期排序，同一天維持輸入順序
         r.notes = r.notes.map((n, k) => ({ n, k })).sort((a, b) => (a.n.date || '').localeCompare(b.n.date || '') || a.k - b.k).map(x => x.n);
         Store.saveReviews(allReviews);
         Sheets.closeTop();
         renderList();
+        renderActivity();
         if (Sheets.stack.includes('detailSheet') && currentEditIndex === noteTarget.index) renderDetailView(noteTarget.index);
     }
 
@@ -2002,6 +2049,7 @@
                 try { next.coverId = await Autofill.saveCover(p.coverUrl); } catch { coverFailed++; }
             }
             if (token !== syncToken) return; // 套用期間關掉了：已下載的封面不會掛上，其他不變
+            logPlatformChanges(allReviews[p.index], next);
             allReviews[p.index] = { ...allReviews[p.index], ...next };
         }
         Store.saveReviews(allReviews);
@@ -2097,9 +2145,11 @@
         const error = editForm.validate();
         if (error) return alert(error);
         const now = new Date();
-        const oldCoverId = allReviews[currentEditIndex].coverId;
-        allReviews[currentEditIndex] = { ...allReviews[currentEditIndex], ...data, updatedAt: now.toLocaleString(), updatedAtTs: now.getTime() };
+        const before = allReviews[currentEditIndex];
+        const oldCoverId = before.coverId;
+        allReviews[currentEditIndex] = { ...before, ...data, updatedAt: now.toLocaleString(), updatedAtTs: now.getTime() };
         Store.saveReviews(allReviews);
+        ActivityLog.recordEdit(before, allReviews[currentEditIndex]);
         editForm.markClean();
         if (oldCoverId && oldCoverId !== data.coverId) CoverStore.delete(oldCoverId).catch(() => {});
         renderAll();
@@ -2112,6 +2162,7 @@
         const title = allReviews[currentEditIndex].title || '未命名';
         if (!confirm(`確定要刪除《${title}》的所有紀錄嗎？`)) return;
         const [removed] = allReviews.splice(currentEditIndex, 1);
+        ActivityLog.add('me', 'deleted', removed);
         if (removed.coverId) CoverStore.delete(removed.coverId).catch(() => {});
         Store.saveReviews(allReviews);
         editForm.markClean();
@@ -2129,7 +2180,7 @@
             const blob = await CoverStore.get(r.coverId).catch(() => null);
             if (blob) covers[r.coverId] = await blobToDataUrl(blob);
         }
-        const packageData = { reviews: allReviews, memo: Store.loadMemo(), covers, commentTracker: Store.loadTracker() };
+        const packageData = { reviews: allReviews, memo: Store.loadMemo(), covers, commentTracker: Store.loadTracker(), activity: ActivityLog.load() };
         const blob = new Blob([JSON.stringify(packageData, null, 2)], { type: 'application/json' });
         const now = new Date();
         const pad = n => String(n).padStart(2, '0');
@@ -2163,6 +2214,7 @@
                 allReviews = imported.reviews || [];
                 Store.saveMemo(imported.memo || '');
                 if (imported.commentTracker) Store.saveTracker(imported.commentTracker);
+                if (Array.isArray(imported.activity)) ActivityLog.save(imported.activity);
                 await CoverStore.clear().catch(() => {});
                 for (const [id, dataUrl] of Object.entries(imported.covers || {})) {
                     const blob = await (await fetch(dataUrl)).blob();
@@ -2191,6 +2243,7 @@
         allReviews = [];
         Store.saveReviews(allReviews);
         Store.saveMemo('');
+        ActivityLog.save([]);
         CoverStore.clear().catch(() => {});
         coverUrls.forEach(url => URL.revokeObjectURL(url));
         coverUrls.clear();
@@ -2211,6 +2264,97 @@
     });
 
     // ---------- 初始化 ----------
+    // ---------- 動態 ----------
+    const ACTIVITY_ICON = { episode: '🆕', resumed: '🔔', finished: '🏁', added: '➕', deleted: '🗑️', progress: '📖', status: '🔄', rating: '⭐', note: '📝', read: '✅' };
+    const ACTIVITY_PAGE = 200;
+    let activityShown = ACTIVITY_PAGE;
+
+    function activityText(e) {
+        const partLabel = EPISODE_PARTS.find(p => p.key === e.part)?.label || '';
+        const stars = n => (n ? `${n}★` : '無');
+        switch (e.type) {
+            case 'episode': return `最新${e.part && e.part !== 'main' ? partLabel : '話數'} ${e.from} → ${e.to} 話`;
+            case 'resumed': return '平台出了新的一話，已改回連載中';
+            case 'finished': return '平台完結，已改成完結';
+            case 'added': return '新增作品';
+            case 'deleted': return '刪除作品';
+            case 'progress': return !e.to ? '清除話數' : e.from ? `看到 ${e.from} → ${e.to}` : `記錄看到 ${e.to}`;
+            case 'status': return `狀態 ${e.from} → ${e.to}`;
+            case 'rating': return `評分 ${stars(e.from)} → ${stars(e.to)}`;
+            case 'note': return e.range ? `寫了筆記（${e.range}）` : '寫了筆記';
+            case 'read': return '本週已讀';
+            default: return '';
+        }
+    }
+
+    function activityDayLabel(dateStr) {
+        const d = new Date(dateStr + 'T00:00:00');
+        const now = new Date();
+        const week = '日一二三四五六'[d.getDay()];
+        const md = d.getFullYear() === now.getFullYear() ? `${d.getMonth() + 1}/${d.getDate()}` : `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+        const today = toDateStr(now);
+        const yesterday = toDateStr(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
+        const prefix = dateStr === today ? '今天 · ' : dateStr === yesterday ? '昨天 · ' : '';
+        return `${prefix}${md}（${week}）`;
+    }
+
+    function setActivitySrc(src) {
+        ui.activitySrc = src;
+        Store.saveUi(ui);
+        activityShown = ACTIVITY_PAGE;
+        renderActivity();
+        window.scrollTo(0, 0);
+    }
+
+    function renderActivity() {
+        const src = ui.activitySrc === 'me' ? 'me' : 'platform';
+        document.querySelectorAll('.activity-seg button').forEach(b => {
+            b.classList.toggle('active', b.dataset.src === src);
+            b.setAttribute('aria-selected', b.dataset.src === src);
+        });
+        const all = ActivityLog.load().filter(e => e.src === src).reverse(); // 新的在上面
+        const el = document.getElementById('activityList');
+        if (!all.length) {
+            el.innerHTML = `<div class="act-empty">${src === 'platform'
+                ? '還沒有平台動態。<br>每天自動檢查或「更新平台資料」找到新話數、回歸、完結時，會記在這裡。'
+                : '還沒有紀錄。<br>按 +1 話、勾本週已讀、改狀態或評分、寫筆記、新增作品時，會記在這裡。'}</div>`;
+            return;
+        }
+        const exists = new Set(allReviews.map(r => r.id));
+        const groups = [];
+        all.slice(0, activityShown).forEach(e => {
+            const day = toDateStr(new Date(e.at));
+            if (groups[groups.length - 1]?.day !== day) groups.push({ day, items: [] });
+            groups[groups.length - 1].items.push(e);
+        });
+        const pad = n => String(n).padStart(2, '0');
+        el.innerHTML = groups.map(g => `
+            <div class="act-day">
+                <div class="act-day-title">${activityDayLabel(g.day)}</div>
+                ${g.items.map(e => {
+                    const at = new Date(e.at);
+                    const tag = exists.has(e.workId) ? 'button' : 'div';
+                    const attrs = tag === 'button' ? ` type="button" data-work="${escapeHtml(e.workId)}" onclick="openActivityWork(this.dataset.work)"` : '';
+                    return `
+                        <${tag} class="act-item"${attrs}>
+                            <span class="act-icon">${ACTIVITY_ICON[e.type] || '•'}</span>
+                            <span class="act-main">
+                                <span class="act-title">${escapeHtml(e.title)}</span>
+                                <span class="act-text">${escapeHtml(activityText(e))}</span>
+                            </span>
+                            <span class="act-time">${pad(at.getHours())}:${pad(at.getMinutes())}</span>
+                        </${tag}>`;
+                }).join('')}
+            </div>`).join('')
+            + (all.length > activityShown ? `<button class="btn act-more" onclick="activityShown += ACTIVITY_PAGE; renderActivity()">顯示更早的紀錄（還有 ${all.length - activityShown} 筆）</button>` : '');
+    }
+
+    function openActivityWork(id) {
+        const index = allReviews.findIndex(r => r.id === id);
+        if (index < 0) return showToast('這部作品已經刪除了');
+        openDetail(index);
+    }
+
     function renderAll() {
         buildFilterOptions();
         renderStatusChips();
@@ -2219,6 +2363,7 @@
         renderReturns();
         renderStats();
         renderBackupBanner();
+        renderActivity();
     }
 
     // ---------- 外觀 ----------
@@ -2308,6 +2453,17 @@
 
     // 休刊的作品：平台上出了比休刊前更新的一話 → 回歸了（休刊期間最新話數不會自動 +1，所以可以直接比）
     // 沒有記錄休刊前的最新話數就無法判斷，不改
+    // 平台動態：比較套用前後，記下新話數（跟上次平台上的數字比，不是每週 +1 的推算）、完結、回歸
+    function logPlatformChanges(before, next) {
+        const after = { ...before, ...next };
+        const old = before.latest;
+        if (next.latest && old && old.part === next.latest.part && next.latest.n > old.n) {
+            ActivityLog.add('platform', 'episode', after, { part: next.latest.part, from: old.n, to: next.latest.n });
+        }
+        if (next.status === '完結' && before.status !== '完結') ActivityLog.add('platform', 'finished', after);
+        if (next.status === DEFAULT_STATUS && before.status === '休刊') ActivityLog.add('platform', 'resumed', after);
+    }
+
     function hasResumed(r, n, part) {
         if ((r.status || DEFAULT_STATUS) !== '休刊' || !n) return false;
         const old = latestEpisode(r);
@@ -2374,7 +2530,10 @@
                 if (!r.updateDay && info.day) next.updateDay = info.day;
                 resumed.push(cleanTitleBrackets(r.title) || '未命名');
             }
-            if (Object.keys(next).length) allReviews[index] = { ...r, ...next };
+            if (Object.keys(next).length) {
+                logPlatformChanges(r, next);
+                allReviews[index] = { ...r, ...next };
+            }
         }
         saveAutoSync({ doneDate: today, last: { ...last, updated, finished, resumed: resumed.length } });
         renderAutoSyncStatus();

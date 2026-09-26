@@ -44,6 +44,7 @@ const STORAGE_KEYS = {
     memo: 'my_review_memo',
     draft: 'comic_review_draft',
     ui: 'my_review_ui',
+    activity: 'my_review_activity', // 動態紀錄（平台動態、我的紀錄）
     backupMeta: 'my_review_backup_meta', // { lastBackupAt, lastChangeAt }：備份提醒用
     commentTracker: 'comment_tracker', // 平台留言追蹤（platform-comments.html）
 };
@@ -505,9 +506,18 @@ function readJson(key, fallback) {
 // 1. 話數寫在標題括號裡，例如「上流社會 (64)」「上流社會 (70+2+1)」→ 搬到 episode 欄位
 // 2. episode 是舊格式（數字 64、字串 "70+2+1"）→ 轉成 { main, side, after }
 // 3. 舊版 returnDate → returnText / returnFrom / returnTo
+function newWorkId() {
+    return 'w' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
 function migrateReviews(list) {
     let changed = false;
     list.forEach(r => {
+        // 每部作品一個固定編號（動態紀錄用來對應作品；標題、順序都可能變）
+        if (!r.id) {
+            r.id = newWorkId();
+            changed = true;
+        }
         // 舊版用 platformFinished 標記「平台已完結」→ 改成「完結」狀態
         if (r.platformFinished !== undefined) {
             if (r.platformFinished && [DEFAULT_STATUS, '休刊'].includes(r.status || DEFAULT_STATUS)) r.status = '完結';
@@ -559,7 +569,7 @@ function backupReminder() {
 const Store = {
     loadReviews() {
         const list = readJson(STORAGE_KEYS.reviews, []);
-        if (migrateReviews(list)) this.saveReviews(list);
+        if (migrateReviews(list)) this.saveReviews(list, { silent: true }); // 自動轉換格式不算使用者改資料，不觸發備份提醒
         return list;
     },
     // silent：背景自動更新最新話數這類可以從平台重新取得的資料，不算「有更新要備份」
@@ -644,6 +654,67 @@ async function makeCoverBlob(file) {
         URL.revokeObjectURL(url);
     }
 }
+
+// ---------- 動態紀錄 ----------
+// localStorage 陣列，舊的在前：{ at, src: 'platform'|'me', type, workId, title, ...細節 }
+// 平台動態：episode { part, from, to }、resumed、finished
+// 我的紀錄：added、deleted、progress { from, to }、status { from, to }、rating { from, to }、note { range }、read
+// 保留 2 年、最多 5000 筆；存檔不算「有更新要備份」（備份檔會一起帶走）
+const ActivityLog = {
+    KEEP_MS: 730 * 864e5,
+    MAX: 5000,
+    load() {
+        const list = readJson(STORAGE_KEYS.activity, []);
+        return Array.isArray(list) ? list : [];
+    },
+    save(list) {
+        const cutoff = Date.now() - this.KEEP_MS;
+        const kept = list.filter(e => e.at >= cutoff).slice(-this.MAX);
+        try { localStorage.setItem(STORAGE_KEYS.activity, JSON.stringify(kept)); } catch {}
+    },
+    add(src, type, review, detail = {}) {
+        if (!review) return;
+        const list = this.load();
+        list.push({ at: Date.now(), src, type, workId: review.id || '', title: cleanTitleBrackets(review.title) || '未命名', ...detail });
+        this.save(list);
+    },
+    // 同一部作品同一天的「看到第幾話」合併成一筆（40話 → 43話）；退回原本的話數就刪掉
+    progress(review, from, to) {
+        if (!review || from === to) return;
+        const list = this.load();
+        const today = toDateStr(new Date());
+        const k = list.findLastIndex(e => e.src === 'me' && e.type === 'progress' && e.workId === review.id && toDateStr(new Date(e.at)) === today);
+        if (k >= 0) {
+            const first = list[k].from;
+            list.splice(k, 1);
+            if (first === to) return this.save(list);
+            from = first;
+        }
+        list.push({ at: Date.now(), src: 'me', type: 'progress', workId: review.id || '', title: cleanTitleBrackets(review.title) || '未命名', from, to });
+        this.save(list);
+    },
+    // 本週已讀：勾選記一筆，同一天取消就刪掉
+    read(review, on) {
+        const list = this.load();
+        const today = toDateStr(new Date());
+        const k = list.findLastIndex(e => e.src === 'me' && e.type === 'read' && e.workId === review.id && toDateStr(new Date(e.at)) === today);
+        if (on && k < 0) return this.add('me', 'read', review);
+        if (!on && k >= 0) {
+            list.splice(k, 1);
+            this.save(list);
+        }
+    },
+    // 存檔前後比較，記下狀態、話數、評分的變化
+    recordEdit(before, after) {
+        if ((before.status || DEFAULT_STATUS) !== (after.status || DEFAULT_STATUS)) {
+            this.add('me', 'status', after, { from: before.status || DEFAULT_STATUS, to: after.status || DEFAULT_STATUS });
+        }
+        const epFrom = episodeLabel(before.episode), epTo = episodeLabel(after.episode);
+        if (epFrom !== epTo) this.progress(after, epFrom, epTo);
+        const rFrom = ratingValue(before.rating), rTo = ratingValue(after.rating);
+        if (rFrom !== rTo) this.add('me', 'rating', after, { from: rFrom, to: rTo });
+    },
+};
 
 function newCoverId() {
     return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
