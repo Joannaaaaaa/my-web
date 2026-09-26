@@ -135,10 +135,13 @@ function daysUntil(dateStr) {
 const EPISODE_PARTS = [
     { key: 'main', label: '本篇', short: '' },
     { key: 'side', label: '外傳', short: '外' },
+    { key: 'special', label: '特別外傳', short: '特' },
     { key: 'after', label: '後記', short: '後' },
 ];
+// 文字寫法「70+2+1」各段的意思：3 段是本篇+外傳+後記（舊資料的寫法），4 段才有特別外傳
+const EPISODE_TEXT_ORDER = { 1: ['main'], 2: ['main', 'side'], 3: ['main', 'side', 'after'], 4: ['main', 'side', 'special', 'after'] };
 
-// 統一轉成 { main?, side?, after? } 或 null；也接受舊格式：數字 64、字串 "70+2+1"（依序 = 本篇+外傳+後記）
+// 統一轉成 { main?, side?, special?, after? } 或 null；也接受舊格式：數字 64、字串 "70+2+1"（見 EPISODE_TEXT_ORDER）
 function normalizeEpisode(value) {
     if (value === undefined || value === null || value === '') return null;
     let parts = {};
@@ -149,13 +152,14 @@ function normalizeEpisode(value) {
         });
     } else {
         const text = String(value).replace(/\s/g, '').replace(/＋/g, '+'); // 中文輸入法常打出全形＋
-        if (!/^\d+(\+\d+){0,2}$/.test(text)) return null;
-        text.split('+').forEach((n, k) => { parts[EPISODE_PARTS[k].key] = Number(n); });
+        if (!/^\d+(\+\d+){0,3}$/.test(text)) return null;
+        const nums = text.split('+');
+        nums.forEach((n, k) => { parts[EPISODE_TEXT_ORDER[nums.length][k]] = Number(n); });
     }
     return Object.keys(parts).length ? parts : null;
 }
 
-// 顯示用：70話、70話·外2、70話·外2·後1、70話·後1
+// 顯示用：70話、70話·外2、70話·外2·後1、70話·外2·特3·後1
 function episodeLabel(value) {
     const ep = normalizeEpisode(value);
     if (!ep) return '';
@@ -163,7 +167,7 @@ function episodeLabel(value) {
         .map(({ key, short }) => key === 'main' ? `${ep.main}話` : `${short}${ep[key]}`).join('·');
 }
 
-// 目前在看的段落：有後記就是後記，其次外傳，否則本篇
+// 目前在看的段落：依 本篇 → 外傳 → 特別外傳 → 後記，最後一個有填的那段
 function currentEpisodePart(value) {
     const ep = normalizeEpisode(value) || {};
     return [...EPISODE_PARTS].reverse().find(({ key }) => ep[key] !== undefined) || EPISODE_PARTS[0];
@@ -853,8 +857,9 @@ const Autofill = {
     search: (platform, keyword, source = AUTOFILL_PLATFORMS[platform]) =>
         serverApi(`/search-series?platform=${source}&keyword=${encodeURIComponent(keyword)}`),
     // 回傳 { url, title, cover, latest, day, finished, people: { author, adapter, artist, studio }, unassigned? }
-    info: (platform, id, source = AUTOFILL_PLATFORMS[platform]) =>
-        serverApi(`/series-info?platform=${source}&id=${encodeURIComponent(id)}`),
+    // need：正在看的段落（side／special／after），伺服器會多往回找那一段的話數
+    info: (platform, id, source = AUTOFILL_PLATFORMS[platform], need = '') =>
+        serverApi(`/series-info?platform=${source}&id=${encodeURIComponent(id)}${need && need !== 'main' ? `&need=${need}` : ''}`),
     // 下載封面、裁切壓縮後存進 IndexedDB，回傳新的 coverId
     async saveCover(url) {
         const res = await fetch(`${API_BASE_URL}/cover-image?url=${encodeURIComponent(url)}`);
@@ -1171,7 +1176,9 @@ function createReviewForm(container, options = {}) {
         afStatus('讀取作品資料…');
         let info;
         try {
-            info = await afWait(Autofill.info(platform, id, source), token);
+            const episodeNow = {};
+            container.querySelectorAll('[data-ep]').forEach(el => { if (/^\d+$/.test(el.value.trim())) episodeNow[el.dataset.ep] = Number(el.value); });
+            info = await afWait(Autofill.info(platform, id, source, currentEpisodePart(episodeNow).key), token);
         } catch (err) {
             if (token === afToken) afStatus(`查詢失敗：${err.message === 'Failed to fetch' ? '連不上伺服器' : err.message}`, 'bad');
             return;

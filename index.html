@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-24">
+    <link rel="stylesheet" href="common.css?v=20260926-25">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -629,7 +629,7 @@
             <summary>話數與待補</summary>
             <div class="help-body">
                 <ul>
-                    <li><b>看到第幾話</b>分本篇／外傳／後記，有才填（例如 70+2+1）。「+1 話」會加在最後一個有填的那一段。</li>
+                    <li><b>看到第幾話</b>分本篇／外傳／特別外傳／後記，有才填（例如 70+2+1 是本篇+外傳+後記；有特別外傳時寫 70+2+3+1）。「+1 話」會加在最後一個有填的那一段。</li>
                     <li><b>平台最新話數</b>：填了就會顯示「待補 N 話」＝ 最新話數 − 看到的話數（同一段才算；看外傳就比外傳）。</li>
                     <li>連載中的作品，每週更新日最新話數<b>自動 +1</b>。</li>
                     <li>有 Naver／Ridi／Naver Series／Bomtoon 網址的作品，<b>每天會自動從平台更新</b>最新話數（見「每天自動檢查」），+1 只是兩次檢查之間的推算；Kakao 和沒填網址的只能靠 +1。</li>
@@ -681,7 +681,7 @@
                     <li><b>KakaoPage</b>：沒貼網址時，用韓文標題到 <b>Kakao Webtoon</b> 搜尋（很多 KakaoPage 作品也在那裡），填作者（分好角色）、封面、更新日、完結；KakaoPage 網址要自己貼。有貼網址時，直接抓 KakaoPage 的標題、封面，作者會去 Kakao Webtoon 找同名作品分角色，找不到就列出名字讓你點放到 원작／글／그림。<b>KakaoPage 抓不到最新話數</b>，也不參加批次更新和每天自動檢查。</li>
                     <li>按「🔎 從平台自動填入」→ 選平台：有填作品網址就直接查，沒有就用韓文標題搜尋、點選正確的作品。</li>
                     <li>會填：作品網址、韓文標題、封面、創作團隊（원작／글／그림／製作團隊）、平台最新話數、更新日。</li>
-                    <li><b>只填空白的欄位</b>。平台最新話數例外，會改成平台上的數字（看外傳／後記時填那一段的）。</li>
+                    <li><b>只填空白的欄位</b>。平台最新話數例外，會改成平台上的數字（看外傳／特別外傳／後記時填那一段的）。</li>
                     <li>你已經寫的創作團隊跟平台不一樣時（平台有你沒寫的人名），會列出來，按「換成平台的」才換。</li>
                     <li>Bomtoon 的成人作品沒登入時只拿得到標題、作者和話數。</li>
                 </ul>
@@ -770,6 +770,7 @@
             <select class="input" id="notePart">
                 <option value="main">本篇</option>
                 <option value="side">外傳</option>
+                <option value="special">特別外傳</option>
                 <option value="after">後記</option>
             </select>
         </div>
@@ -822,7 +823,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260926-24"></script>
+<script src="common.js?v=20260926-25"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added', view: 'list' }, Store.loadUi());
@@ -1286,7 +1287,7 @@
         if (episodeLabel(r.episode)) {
             r.episode = stepEpisode(r.episode, 1);
         } else {
-            const input = prompt(`《${cleanTitleBrackets(r.title)}》本篇看到第幾話？\n（外傳、後記可以之後在編輯裡填）`);
+            const input = prompt(`《${cleanTitleBrackets(r.title)}》本篇看到第幾話？\n（外傳、特別外傳、後記可以之後在編輯裡填）`);
             if (input === null) return;
             if (!/^\s*\d+\s*$/.test(input)) return alert('請輸入數字');
             r.episode = { main: parseInt(input) };
@@ -1895,7 +1896,7 @@
             }
             if (!id) return { failed: `${supported.map(p => PLATFORM_CONFIG[p].short).join('／')} 找不到同名作品，請在編輯頁按「從平台自動填入」手動選` };
         }
-        const info = await Autofill.info(platform, id);
+        const info = await Autofill.info(platform, id, undefined, currentEpisodePart(r.episode).key);
         const next = {};
         const rows = [];
         const flags = [];
@@ -2508,7 +2509,7 @@
                 const r = queue.shift();
                 const platform = r.platforms.find(p => canAutoSync(p) && workIdFromLink(p, r.links[p]));
                 try {
-                    found.push({ r, info: await Autofill.info(platform, workIdFromLink(platform, r.links[platform])) });
+                    found.push({ r, info: await Autofill.info(platform, workIdFromLink(platform, r.links[platform]), undefined, currentEpisodePart(r.episode).key) });
                     ok++;
                 } catch (err) {
                     error = err.message === 'Failed to fetch' ? '連不上伺服器' : err.message; // 單部失敗就略過

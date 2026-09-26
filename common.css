@@ -201,7 +201,7 @@ input[type="date"].input { -webkit-appearance: none; appearance: none; }
 a.tag-link { text-decoration: none; padding: 4px 8px; }
 a.tag-link:active { background: var(--raised); }
 
-.episode-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 360px; }
+.episode-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; max-width: 420px; }
 .episode-grid .episode-label { font-size: 0.78rem; margin-bottom: 4px; font-weight: normal; }
 .episode-grid .input { text-align: center; }
 
