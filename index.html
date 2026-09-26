@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-21">
+    <link rel="stylesheet" href="common.css?v=20260926-22">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -676,7 +676,7 @@
             <summary>從平台自動填入（編輯頁）</summary>
             <div class="help-body">
                 <ul>
-                    <li>支援 <b>Naver、Ridi、Naver Series、Bomtoon</b>。Kakao 會擋伺服器的請求，無法自動填。</li>
+                    <li>支援 <b>Naver、Ridi、Naver Series、Bomtoon</b>。<b>KakaoPage</b> 只能先貼作品網址再查，可以填韓文標題、封面、更新日（介紹裡有寫才有）；作者沒標角色，要自己點放到 원작／글／그림；抓不到最新話數，也不參加批次更新和每天自動檢查。</li>
                     <li>按「🔎 從平台自動填入」→ 選平台：有填作品網址就直接查，沒有就用韓文標題搜尋、點選正確的作品。</li>
                     <li>會填：作品網址、韓文標題、封面、創作團隊（원작／글／그림／製作團隊）、平台最新話數、更新日。</li>
                     <li><b>只填空白的欄位</b>。平台最新話數例外，會改成平台上的數字（看外傳／後記時填那一段的）。</li>
@@ -820,7 +820,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260926-21"></script>
+<script src="common.js?v=20260926-22"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added', view: 'list' }, Store.loadUi());
@@ -1841,7 +1841,7 @@
     let syncToken = 0;
 
     function syncTargets() {
-        return allReviews.map((r, index) => ({ r, index })).filter(({ r }) => (r.platforms || []).some(p => AUTOFILL_PLATFORMS[p]));
+        return allReviews.map((r, index) => ({ r, index })).filter(({ r }) => (r.platforms || []).some(canAutoSync));
     }
 
     function openSync() {
@@ -1869,7 +1869,7 @@
     }
 
     async function syncOne({ r, index }) {
-        const supported = r.platforms.filter(p => AUTOFILL_PLATFORMS[p]);
+        const supported = r.platforms.filter(canAutoSync);
         const linked = supported.find(p => workIdFromLink(p, (r.links || {})[p]));
         let platform = linked;
         let id = linked && workIdFromLink(linked, r.links[linked]);
@@ -2478,7 +2478,7 @@
         const state = loadAutoSync();
         if (state.doneDate === today) return;
         const targets = allReviews.filter(r => AUTO_SYNC_STATUSES.includes(r.status || DEFAULT_STATUS)
-            && (r.platforms || []).some(p => AUTOFILL_PLATFORMS[p] && workIdFromLink(p, (r.links || {})[p])));
+            && (r.platforms || []).some(p => canAutoSync(p) && workIdFromLink(p, (r.links || {})[p])));
         if (!targets.length) {
             saveAutoSync({ doneDate: today, last: { at: Date.now(), checked: 0, ok: 0 } });
             renderAutoSyncStatus();
@@ -2493,7 +2493,7 @@
         await Promise.all(Array.from({ length: SYNC_CONCURRENCY }, async () => {
             while (queue.length) {
                 const r = queue.shift();
-                const platform = r.platforms.find(p => AUTOFILL_PLATFORMS[p] && workIdFromLink(p, r.links[p]));
+                const platform = r.platforms.find(p => canAutoSync(p) && workIdFromLink(p, r.links[p]));
                 try {
                     found.push({ r, info: await Autofill.info(platform, workIdFromLink(platform, r.links[platform])) });
                     ok++;

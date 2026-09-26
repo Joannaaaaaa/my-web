@@ -767,8 +767,11 @@ const API_BASE_URL = globalThis.location?.protocol === 'https:'
     // localhost 會指到手機自己，所以要用 location.hostname
     : `http://${globalThis.location?.hostname || 'localhost'}:3000`;
 
-// App 平台名稱 → 伺服器的平台代號；Kakao 會擋伺服器的請求，目前不支援
-const AUTOFILL_PLATFORMS = { "Naver": 'naver', "Ridibooks": 'ridi', "Naver Series": 'series', "Bomtoon": 'bomtoon' };
+// App 平台名稱 → 伺服器的平台代號
+const AUTOFILL_PLATFORMS = { "Naver": 'naver', "Ridibooks": 'ridi', "Naver Series": 'series', "Bomtoon": 'bomtoon', "Kakao": 'kakao' };
+// KakaoPage 只能貼網址查（不能用標題搜尋），也拿不到最新話數：不參加批次更新和每天自動檢查
+const AUTOFILL_LINK_ONLY = ['Kakao'];
+const canAutoSync = platform => !!AUTOFILL_PLATFORMS[platform] && !AUTOFILL_LINK_ONLY.includes(platform);
 
 // 從作品網址取出作品編號，認不出來回傳空字串
 function workIdFromLink(platform, url) {
@@ -778,6 +781,7 @@ function workIdFromLink(platform, url) {
         "Ridibooks": /ridibooks\.com\/books\/(\d+)/,
         "Naver Series": /series\.naver\.com\/.*[?&]productNo=(\d+)/,
         "Bomtoon": /bomtoon\.com\/detail\/([A-Za-z0-9_-]+)/,
+        "Kakao": /page\.kakao\.com\/(?:content|home\/[^/?#]+)\/(\d+)/,
     };
     const m = patterns[platform] && u.match(patterns[platform]);
     return m ? m[1] : '';
@@ -1130,6 +1134,9 @@ function createReviewForm(container, options = {}) {
         $('[data-role="af-results"]').innerHTML = '';
         const id = workIdFromLink(platform, $(`[data-link="${platform}"]`).value);
         if (id) return afApply(platform, id, token);
+        if (AUTOFILL_LINK_ONLY.includes(platform)) {
+            return afStatus('KakaoPage 不能用標題搜尋：先在下面「發行平台」貼上 KakaoPage 作品網址（page.kakao.com/content/…），再按一次', 'bad');
+        }
         const keyword = $('[data-field="krTitle"]').value.trim() || cleanTitleBrackets($('[data-field="title"]').value);
         if (!keyword) return afStatus('先填韓文標題（或漫畫名稱）再查', 'bad');
         afStatus(`在 ${platform} 搜尋「${keyword}」…`);
@@ -1211,13 +1218,29 @@ function createReviewForm(container, options = {}) {
             }
         }
         if (token !== afToken) return;
+        // KakaoPage 的作者沒有角色：列出名字，讓使用者點要放到哪一欄（已經在任何欄位裡的不列）
+        const placed = new Set(AUTOFILL_PEOPLE_KEYS.flatMap(k => splitNames($(`[data-field="${k}"]`).value)));
+        const unassigned = (info.unassigned || []).filter(n => !placed.has(n));
+        const assignHtml = unassigned.length ? `
+            <div class="autofill-assign">
+                <div class="autofill-diff-label">作者（平台沒標角色，點一下放到對應欄位）</div>
+                ${unassigned.map(n => `
+                    <div class="autofill-assign-row">
+                        <span class="autofill-assign-name">${escapeHtml(n)}</span>
+                        ${[['author', '원작'], ['adapter', '글'], ['artist', '그림'], ['studio', '제작팀']].map(([k, label]) =>
+                            `<button type="button" class="chip" data-af-assign="${k}" data-name="${escapeHtml(n)}">${label}</button>`).join('')}
+                    </div>`).join('')}
+            </div>` : '';
+        if (AUTOFILL_LINK_ONLY.includes(platform)) notes.push('KakaoPage 抓不到最新話數，請自己填（連載中會每週自動 +1）');
         afStatus([
             filled.length ? `✅ 已填入：${filled.join('、')}` : '沒有需要填的欄位（已填的不會被覆蓋）',
             ...notes,
-            ...(diffs.length ? ['⚠️ 下面這些你寫的跟平台不一樣，要換再按：'] : []),
+            ...(unassigned.length || diffs.length ? ['👇 下面還有需要你決定的'] : []),
         ].join('\n'), 'ok');
         // 跟平台不一樣的已填欄位：列出來讓使用者決定要不要換
-        $('[data-role="af-results"]').innerHTML = diffs.map(d => {
+        $('[data-role="af-results"]').innerHTML = assignHtml
+            + (diffs.length ? '<div class="autofill-diff-label">你寫的跟平台不一樣，要換再按：</div>' : '')
+            + diffs.map(d => {
             const job = JOB_KEYS.find(j => j.key === d.key);
             return `
                 <div class="autofill-diff" data-af-diff="${d.key}">
@@ -1245,6 +1268,17 @@ function createReviewForm(container, options = {}) {
         if (afBtn) return afRun(afBtn.dataset.afPlatform);
         const pick = e.target.closest('button[data-af-pick]');
         if (pick) return afApply(afPlatform, pick.dataset.afPick);
+        const assign = e.target.closest('button[data-af-assign]');
+        if (assign) {
+            const el = $(`[data-field="${assign.dataset.afAssign}"]`);
+            const names = splitNames(el.value);
+            if (!names.includes(assign.dataset.name)) el.value = [...names, assign.dataset.name].join('、');
+            assign.closest('.autofill-assign-row').remove();
+            const box = container.querySelector('.autofill-assign');
+            if (box && !box.querySelector('.autofill-assign-row')) box.remove();
+            container.querySelector('.team-details').open = true;
+            return changed();
+        }
         const replace = e.target.closest('button[data-af-replace]');
         if (replace) {
             $(`[data-field="${replace.dataset.afReplace}"]`).value = replace.dataset.valueNew;

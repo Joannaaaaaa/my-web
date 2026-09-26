@@ -388,10 +388,42 @@ async function bomtoonInfo(alias) {
     };
 }
 
-const SERIES_INFO = { naver: naverInfo, ridi: ridiInfo, series: seriesInfo, bomtoon: bomtoonInfo };
+// KakaoPage：API 都會擋，但給「分享預覽機器人」的頁面有標題、封面、作者（沒有角色）和前幾話
+// 沒有最新話數、也不能用標題搜尋（只能貼網址）；作者放在 unassigned，讓使用者自己分到 글／그림／원작
+const PREVIEW_BOT_UA = 'facebookexternalhit/1.1';
+async function kakaoInfo(id) {
+    const r = await fetch(`https://page.kakao.com/content/${id}`, { headers: { 'user-agent': PREVIEW_BOT_UA } });
+    if (!r.ok) throw new Error('找不到作品');
+    const html = await r.text();
+    const meta = name => decodeEntities((html.match(new RegExp(`<meta property="og:${name}" content="([^"]*)"`)) || [])[1] || '');
+    const title = meta('title');
+    if (!title || title === '카카오페이지') throw new Error('找不到作品');
+    let names = [];
+    for (const m of html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)) {
+        try {
+            const ld = JSON.parse(m[1]);
+            if (ld['@type'] === 'CreativeWorkSeries') names = String(ld.author?.name || '').split(',').map(n => n.trim()).filter(Boolean);
+        } catch { /* 格式不對就略過 */ }
+    }
+    const text = decodeEntities(html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, ' '));
+    const dayMatch = text.match(/매주\s*([월화수목금토일])요일/);
+    return {
+        title,
+        url: `https://page.kakao.com/content/${id}`,
+        cover: meta('image'),
+        latest: null,
+        latestParts: { main: null, side: null, after: null },
+        day: dayMatch ? DAY_FROM_KR[dayMatch[1]] : '',
+        finished: false,
+        people: { author: [], adapter: [], artist: [], studio: [] },
+        unassigned: names,
+    };
+}
+
+const SERIES_INFO = { naver: naverInfo, ridi: ridiInfo, series: seriesInfo, bomtoon: bomtoonInfo, kakao: kakaoInfo };
 app.get('/series-info', async (req, res) => {
     const { platform, id } = req.query;
-    if (!SERIES_INFO[platform]) return res.status(400).send('platform 必須是 naver、ridi、series 或 bomtoon');
+    if (!SERIES_INFO[platform]) return res.status(400).send('platform 必須是 naver、ridi、series、bomtoon 或 kakao');
     const idPattern = platform === 'bomtoon' ? /^[A-Za-z0-9_-]+$/ : /^\d+$/;
     if (!idPattern.test(id || '')) return res.status(400).send('id 格式錯誤');
     try {
@@ -402,7 +434,7 @@ app.get('/series-info', async (req, res) => {
 });
 
 // 封面圖轉發：瀏覽器要拿到圖片檔才能存進 IndexedDB，只允許平台的圖片網域
-const COVER_HOSTS = /(^|\.)(pstatic\.net|ridicdn\.net|balcony\.studio)$/;
+const COVER_HOSTS = /(^|\.)(pstatic\.net|ridicdn\.net|balcony\.studio)$|^dn-img-page\.kakao\.com$/;
 app.get('/cover-image', async (req, res) => {
     let target;
     try { target = new URL(String(req.query.url || '')); } catch { return res.status(400).send('網址錯誤'); }
