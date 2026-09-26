@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-10">
+    <link rel="stylesheet" href="common.css?v=20260926-11">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -627,7 +627,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260926-10"></script>
+<script src="common.js?v=20260926-11"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added', view: 'list' }, Store.loadUi());
@@ -1631,7 +1631,7 @@
                 會查 <b>${n}</b> 部有 Naver、Ridi 或 Naver Series 的作品：<br>
                 ・有填作品網址的直接查；沒填的用韓文標題找完全同名的作品，找到會補上網址<br>
                 ・只補空白的欄位：網址、韓文標題、封面、創作團隊、更新日<br>
-                ・平台最新話數：看本篇、而且是連載中／休刊／想看的作品才更新<br>
+                ・平台最新話數：連載中／休刊／想看的作品才更新，看外傳或後記的會比對那一段<br>
                 查完會先列出變動，勾選後才會套用。第一次要等伺服器醒來，最多約 1 分鐘。
             </p>`;
         document.getElementById('syncToggleAll').hidden = true;
@@ -1680,11 +1680,14 @@
             }
         });
         const status = r.status || DEFAULT_STATUS;
-        const part = currentEpisodePart(normalizeEpisode(r.episode) || {}).key;
+        // 最新話數跟著「正在看的那一段」：看外傳就比外傳最新第幾話
+        const part = currentEpisodePart(r.episode);
+        const newLatest = platformLatest(info, part.key);
         const oldLatest = latestEpisode(r);
-        if (info.latest && SYNC_LATEST_STATUSES.includes(status) && part === 'main' && (!oldLatest || oldLatest.part !== 'main' || oldLatest.n !== info.latest)) {
-            next.latest = { n: info.latest, part: 'main', asOf: toDateStr(new Date()) };
-            rows.push(['最新話數', oldLatest ? `<span class="old">${oldLatest.n}</span> → ${info.latest}` : String(info.latest), true]);
+        if (newLatest && SYNC_LATEST_STATUSES.includes(status) && (!oldLatest || oldLatest.part !== part.key || oldLatest.n !== newLatest)) {
+            next.latest = { n: newLatest, part: part.key, asOf: toDateStr(new Date()) };
+            const label = `最新話數${part.key === 'main' ? '' : `（${part.label}）`}`;
+            rows.push([label, oldLatest && oldLatest.part === part.key ? `<span class="old">${oldLatest.n}</span> → ${newLatest}` : String(newLatest), true]);
         }
         if (status === DEFAULT_STATUS && !r.updateDay && info.day && !info.finished) {
             next.updateDay = info.day;

@@ -174,24 +174,65 @@ app.get('/search-series', async (req, res) => {
 });
 
 // 自動填入用：用作品編號查資料
-// 回傳 { platform, seriesId, url, title, cover, latest, day, finished, people: { author, adapter, artist, studio } }
-// latest 是平台上最新一話的話數（Naver 含付費預覽），day 是 Mon～Sun 或空字串
+// 回傳 { platform, seriesId, url, title, cover, latest, latestParts, day, finished, people: { author, adapter, artist, studio } }
+// latestParts = { main, side, after }：本篇／外傳／後記各自最新第幾話（Naver 含付費預覽），latest = latestParts.main
+// day 是 Mon～Sun 或空字串
 const DAY_FROM_EN = { MONDAY: 'Mon', TUESDAY: 'Tue', WEDNESDAY: 'Wed', THURSDAY: 'Thu', FRIDAY: 'Fri', SATURDAY: 'Sat', SUNDAY: 'Sun' };
 const DAY_FROM_KR = { 월: 'Mon', 화: 'Tue', 수: 'Wed', 목: 'Thu', 금: 'Fri', 토: 'Sat', 일: 'Sun' };
-const episodeNo = subtitle => {
-    const m = String(subtitle || '').match(/(\d+)\s*화/);
-    return m ? Number(m[1]) : null;
+// 話次標題 → 數字：取最後一個「N화」，或「331. 제107장」這種開頭數字；「마지막 화」「엔딩」回傳 null
+const episodeNo = title => {
+    const t = String(title || '');
+    const all = [...t.matchAll(/(\d+)\s*화/g)];
+    if (all.length) return Number(all[all.length - 1][1]);
+    const lead = t.match(/^(\d+)[.\s]/);
+    return lead ? Number(lead[1]) : null;
 };
+const SIDE_RE = /외전|번외|특별편/;
+const AFTER_RE = /후기/;
+
+// 依「新 → 舊」的話次標題算出本篇／外傳／後記各自最新第幾話
+// 外傳：標題有 외전、번외、특별편；後記：有 후기（「외전 마지막화+후기」同時算外傳和後記）
+// 沒有數字的（마지막 화、엔딩）= 同一段前一個有數字的話 + 1
+function createPartCounter() {
+    const parts = { main: { n: null, extra: 0 }, side: { n: null, extra: 0 } };
+    let after = 0;
+    return {
+        add(title) {
+            const t = String(title || '');
+            const side = SIDE_RE.test(t);
+            if (AFTER_RE.test(t)) {
+                after++;
+                if (!side) return;
+            }
+            const part = parts[side ? 'side' : 'main'];
+            if (part.n != null) return;
+            const n = episodeNo(t);
+            if (n == null) part.extra++;
+            else part.n = n + part.extra;
+        },
+        get mainFound() { return parts.main.n != null; },
+        result() {
+            const pick = p => p.n ?? (p.extra || null);
+            return { main: pick(parts.main), side: pick(parts.side), after: after || null };
+        },
+    };
+}
+const MAX_LIST_PAGES = 10; // 找本篇最新話最多往回翻幾頁（外傳很長的作品要翻比較多頁）
 const STUDIO_RE = /코믹스|스튜디오|studio|comics|웹툰|엔터|미디어|media|ent\b/i;
 
 async function naverInfo(id) {
     const headers = { 'user-agent': MOBILE_UA };
     const info = await (await fetch(`https://comic.naver.com/api/article/list/info?titleId=${id}`, { headers })).json();
     if (!info.titleName) throw new Error('找不到作品');
-    const list = await (await fetch(`https://comic.naver.com/api/article/list?titleId=${id}&page=1&sort=DESC`, { headers })).json();
-    // 付費預覽（chargeFolderArticleList）比免費的新，一起算
-    const articles = [...(list.chargeFolderArticleList || []), ...(list.articleList || [])];
-    const latest = articles.map(a => episodeNo(a.subtitle)).find(n => n != null) ?? null;
+    // 付費預覽（chargeFolderArticleList）比免費的新，一起算；往回翻頁直到找到本篇的話數
+    const counter = createPartCounter();
+    for (let page = 1; page <= MAX_LIST_PAGES && !counter.mainFound; page++) {
+        const list = await (await fetch(`https://comic.naver.com/api/article/list?titleId=${id}&page=${page}&sort=DESC`, { headers })).json();
+        const articles = [...(page === 1 ? list.chargeFolderArticleList || [] : []), ...(list.articleList || [])];
+        articles.forEach(a => counter.add(a.subtitle));
+        if (page >= (list.pageInfo?.totalPages || 1)) break;
+    }
+    const latestParts = counter.result();
     const people = { author: [], adapter: [], artist: [], studio: [] };
     for (const a of info.communityArtists || []) {
         const types = a.artistTypeList || [];
@@ -203,7 +244,8 @@ async function naverInfo(id) {
         title: info.titleName,
         url: `https://comic.naver.com/webtoon/list?titleId=${id}`,
         cover: info.thumbnailUrl || '',
-        latest,
+        latest: latestParts.main,
+        latestParts,
         day: (info.publishDayOfWeekList || []).map(d => DAY_FROM_EN[d]).find(Boolean) || '',
         finished: !!info.finished,
         people,
@@ -220,11 +262,27 @@ async function ridiInfo(id) {
     const series = book.series || {};
     const prop = series.property || {};
     const rootId = series.id || id;
-    let latest = null;
+    // 作品頁有每一話的標題（含還沒開放的），只算到已開放的最後一話
+    let openedVolume = Infinity;
     if (prop.opened_last_volume_id) {
         const last = prop.opened_last_volume_id === id ? book : await get(prop.opened_last_volume_id);
-        latest = episodeNo(last.title?.main) ?? last.series?.volume ?? null;
+        openedVolume = last.series?.volume ?? Infinity;
     }
+    const page = await fetch(`https://ridibooks.com/books/${rootId}`, { headers: { 'user-agent': MOBILE_UA } });
+    const html = page.ok ? await page.text() : '';
+    const titles = new Map();
+    const re = /"id":"\d{6,}","title":"((?:[^"\\]|\\.)*)","series_title":(?:null|"(?:[^"\\]|\\.)*"),"author":(?:null|"(?:[^"\\]|\\.)*"),"genre":"[a-z]+","pub_id":"\d+","volume":"(\d+)"/g;
+    let m;
+    while ((m = re.exec(html))) {
+        const volume = Number(m[2]);
+        if (volume <= openedVolume && !titles.has(volume)) titles.set(volume, JSON.parse(`"${m[1]}"`));
+    }
+    const counter = createPartCounter();
+    [...titles].sort((a, b) => b[0] - a[0]).forEach(([, title]) => counter.add(title));
+    const latestParts = counter.result();
+    if (!titles.size && Number.isFinite(openedVolume)) latestParts.main = openedVolume;
+    const schedule = (html.match(/"schedules":\[\{"content":"[^"]*","title":"([^"]*)"/) || [])[1] || '';
+    const dayMatch = schedule.match(/매주\s*([월화수목금토일])/);
     const people = { author: [], adapter: [], artist: [], studio: [] };
     for (const a of book.authors || []) {
         const role = String(a.role || '').toUpperCase();
@@ -237,8 +295,9 @@ async function ridiInfo(id) {
         title: prop.title || book.title?.main || '',
         url: `https://ridibooks.com/books/${rootId}`,
         cover: `https://img.ridicdn.net/cover/${rootId}/xxlarge`,
-        latest,
-        day: '',
+        latest: latestParts.main,
+        latestParts,
+        day: dayMatch ? DAY_FROM_KR[dayMatch[1]] : '',
         finished: !!(prop.is_serial_complete || prop.is_completed),
         people,
     };
@@ -261,11 +320,21 @@ async function seriesInfo(id) {
         people[roles[m[1]]].push(...(names.length ? names : [decodeEntities(m[2].replace(/<[^>]*>/g, '')).trim()].filter(Boolean)));
     }
     const dayMatch = decodeEntities(html).match(/매주\s*([월화수목금토일])요일/);
+    // 話次清單（新 → 舊，一頁 30 話），標題像「화산귀환[독점] 181화」
+    const counter = createPartCounter();
+    for (let page = 1; page <= MAX_LIST_PAGES && !counter.mainFound; page++) {
+        const r2 = await fetch(`https://series.naver.com/comic/volumeList.series?productNo=${id}&sortOrder=DESC&totalCount=9999&page=${page}`, { headers: { 'user-agent': DESKTOP_UA } });
+        const list = (await r2.json().catch(() => ({}))).resultData || [];
+        list.forEach(v => counter.add(String(v.expansionProductName || '').replace(v.productName || '', '')));
+        if (list.length < 30) break;
+    }
+    const latestParts = counter.result();
     return {
         title,
         url: `https://series.naver.com/comic/detail.series?productNo=${id}`,
         cover: meta('image').replace(/\?type=.*$/, '?type=m260'),
-        latest: (desc.match(/^(\d+)\s*화/) || [])[1] ? Number(desc.match(/^(\d+)\s*화/)[1]) : null,
+        latest: latestParts.main,
+        latestParts,
         day: dayMatch ? DAY_FROM_KR[dayMatch[1]] : '',
         finished: /^\d+\s*화\s*완결/.test(desc),
         people,

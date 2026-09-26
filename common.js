@@ -742,6 +742,11 @@ const Autofill = {
     },
 };
 
+// 平台上某一段（main／side／after）最新第幾話；舊版伺服器沒有 latestParts 時只有本篇
+function platformLatest(info, part) {
+    return info.latestParts ? info.latestParts[part] || null : (part === 'main' ? info.latest || null : null);
+}
+
 // 平台資料的人員 → 表單欄位（原作／글／그림／製作團隊）
 const AUTOFILL_PEOPLE_KEYS = ['author', 'adapter', 'artist', 'studio'];
 
@@ -784,7 +789,7 @@ function createReviewForm(container, options = {}) {
         <div class="form-section autofill">
             <button type="button" class="btn autofill-btn" data-role="af-open">🔎 從平台自動填入</button>
             <div class="autofill-panel" data-role="af-panel" hidden>
-                <div class="form-hint">選平台：有填作品網址就直接查，沒有就用韓文標題搜尋。只會填空白的欄位，平台最新話數會更新成平台上的數字。</div>
+                <div class="form-hint">選平台：有填作品網址就直接查，沒有就用韓文標題搜尋。只會填空白的欄位；平台最新話數會更新成平台上的數字（看外傳／後記時填那一段的）。</div>
                 <div class="chip-group">
                     ${Object.keys(AUTOFILL_PLATFORMS).map(p => `<button type="button" class="chip" data-af-platform="${p}" style="--opt-color: ${platformColor(p)}">${p}</button>`).join('')}
                 </div>
@@ -1034,14 +1039,17 @@ function createReviewForm(container, options = {}) {
             filled.push('創作團隊');
             container.querySelector('.team-details').open = true;
         }
-        if (info.latest) {
+        {
+            // 最新話數跟著「正在看的那一段」：看外傳就填外傳最新第幾話
             const episode = {};
             container.querySelectorAll('[data-ep]').forEach(el => { if (/^\d+$/.test(el.value.trim())) episode[el.dataset.ep] = Number(el.value); });
-            if (currentEpisodePart(episode).key === 'main') {
-                $('[data-role="latest"]').value = info.latest;
-                filled.push(`最新 ${info.latest} 話`);
-            } else {
-                notes.push(`平台最新是第 ${info.latest} 話，你在看外傳／後記，所以沒有改最新話數`);
+            const part = currentEpisodePart(episode);
+            const n = platformLatest(info, part.key);
+            if (n) {
+                $('[data-role="latest"]').value = n;
+                filled.push(`最新${part.key === 'main' ? '' : ' ' + part.label} ${n} 話`);
+            } else if (part.key !== 'main') {
+                notes.push(`平台上找不到${part.label}的話數，最新話數沒有改`);
             }
         }
         if (!state.updateDay && info.day && !info.finished) { state.updateDay = info.day; filled.push(`更新日 ${DAY_MAP[info.day]}`); }
