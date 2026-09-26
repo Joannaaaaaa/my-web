@@ -162,7 +162,9 @@
     // 瀏覽器不能直接呼叫各平台的 API（沒開 CORS、需要特殊標頭），所以透過 comment.js 伺服器轉發
     const API_BASE_URL = window.location.protocol === 'https:'
         ? 'https://webtoon-api-e0vg.onrender.com'
-        : 'http://localhost:3000';
+        // 本機測試：連「打開網頁的那台電腦」的 3000 port。手機用筆電 IP 打開時，
+        // localhost 會指到手機自己，所以要用 location.hostname
+        : `http://${location.hostname || 'localhost'}:3000`;
 
     const PLATFORM_INFO = {
         webtoon: { label: 'Webtoon', color: '#00d564', pageId: (s, n) => `w_${s.seriesId}_${n}` },
@@ -243,7 +245,7 @@
             pill.textContent = '已連線';
         } catch (err) {
             pill.className = 'server-pill bad';
-            pill.textContent = API_BASE_URL.includes('localhost') ? '本機伺服器沒開' : '連不上伺服器';
+            pill.textContent = API_BASE_URL.startsWith('http://') ? '電腦上的伺服器沒開' : '連不上伺服器';
         }
     }
 
