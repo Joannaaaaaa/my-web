@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260927-9">
+    <link rel="stylesheet" href="common.css?v=20260927-10">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -234,6 +234,31 @@
         .kpi-grid.three { grid-template-columns: repeat(3, 1fr); margin: 0 0 14px; }
         .kpi-grid.three .kpi { background: var(--raised); border: none; padding: 10px 12px; }
         .kpi-grid.three .kpi-value { font-size: 1.4rem; }
+        /* 閱讀日曆 */
+        .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .cal-nav { display: flex; align-items: center; gap: 4px; font-size: 0.9rem; font-weight: bold; }
+        .cal-nav .icon-btn { width: 36px; height: 36px; font-size: 1.4rem; }
+        .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+        .cal-week { font-size: 0.72rem; color: var(--text-muted); text-align: center; padding-bottom: 2px; }
+        .cal-cell { aspect-ratio: 1; border: none; border-radius: 8px; background: var(--raised); color: var(--text-sub); font: inherit; font-size: 0.75rem;
+            display: flex; align-items: flex-start; justify-content: flex-start; padding: 4px 5px; cursor: pointer; }
+        .cal-cell.empty { visibility: hidden; }
+        .cal-cell.future { opacity: 0.35; cursor: default; }
+        .cal-cell.today { box-shadow: inset 0 0 0 2px var(--primary); }
+        .cal-cell.selected { box-shadow: inset 0 0 0 2px var(--text); }
+        .cal-cell.lv1, .cal-legend .lv1 { background: color-mix(in srgb, var(--primary) 22%, var(--raised)); }
+        .cal-cell.lv2, .cal-legend .lv2 { background: color-mix(in srgb, var(--primary) 45%, var(--raised)); }
+        .cal-cell.lv3, .cal-legend .lv3 { background: color-mix(in srgb, var(--primary) 70%, var(--raised)); color: #fff; }
+        .cal-cell.lv4, .cal-legend .lv4 { background: var(--primary); color: #fff; }
+        .cal-legend { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 8px; font-size: 0.72rem; color: var(--text-muted); }
+        .cal-legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+        .cal-summary { margin-top: 10px; font-size: 0.85rem; color: var(--text-sub); line-height: 1.7; }
+        .cal-summary b { color: var(--text); }
+        .cal-day { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+        .cal-day-title { font-size: 0.85rem; font-weight: bold; margin-bottom: 6px; }
+        .cal-day-row { display: flex; gap: 8px; align-items: baseline; font-size: 0.85rem; padding: 3px 0; }
+        .cal-day-row .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cal-day-row .d { color: var(--text-sub); white-space: nowrap; }
         .year-section-title { font-size: 0.85rem; color: var(--text-muted); font-weight: bold; margin: 18px 0 8px; }
         .month-chart { display: grid; grid-template-columns: repeat(12, 1fr); gap: 2px; height: 130px; align-items: end; }
         .month-col {
@@ -490,6 +515,20 @@
 
     <section class="tab-panel" id="tab-stats">
         <div class="kpi-grid" id="kpiGrid"></div>
+        <div class="panel" id="calendarPanel">
+            <div class="cal-head">
+                <div class="panel-title" style="margin:0;">📅 閱讀日曆</div>
+                <div class="cal-nav">
+                    <button class="icon-btn" onclick="moveCalendar(-1)" aria-label="上個月">‹</button>
+                    <span id="calMonth"></span>
+                    <button class="icon-btn" onclick="moveCalendar(1)" aria-label="下個月">›</button>
+                </div>
+            </div>
+            <div class="cal-grid" id="calGrid"></div>
+            <div class="cal-legend"><span>少</span><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i><span>多</span></div>
+            <div class="cal-summary" id="calSummary"></div>
+            <div id="calDay"></div>
+        </div>
         <div class="panel" id="yearPanel">
             <div class="panel-title">🗓 年度回顧</div>
             <div class="chart-chips" id="yearChips"></div>
@@ -748,7 +787,7 @@
                     <li><b>封面牆</b>：搜尋列旁的 ▦ 切換成只看封面；左上是狀態、右上是待補。</li>
                     <li><b>創作者頁</b>：點詳細頁裡的人名，看他參與的所有作品；卡片上的 🔗 是合作過的其他作品。</li>
                     <li><b>閱讀筆記</b>：詳細頁「＋ 筆記」，可以記日期和第幾話。</li>
-                    <li><b>統計</b>：各平台閱讀狀態、評分分布、年度回顧（要填開始／結束日期）。</li>
+                    <li><b>統計</b>：最上面是<b>閱讀日曆</b>（每天看了幾話，顏色越深越多；點某天看那天看了什麼；下面有本月看了幾話、幾部、最長連續幾天、最常看哪部，資料來自「我的紀錄」，從動態功能上線後開始累積），還有各平台閱讀狀態、評分分布、年度回顧（要填開始／結束日期）。</li>
                     <li><b>平台連結</b>：卡片上的平台標籤，有填網址（↗）直接打開作品頁，沒填（🔍）用韓文標題搜尋。</li>
                     <li><b>外觀</b>：⋯ 選單切換 跟隨手機／深色／淺色。</li>
                     <li><b>平台留言</b>：下方「💬 留言」分頁，那一頁右上角「？」有自己的說明。</li>
@@ -825,7 +864,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260927-9"></script>
+<script src="common.js?v=20260927-10"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added', view: 'list' }, Store.loadUi());
@@ -1324,6 +1363,7 @@
         renderList();
         renderWeekly();
         renderActivity();
+        renderCalendar();
         if (currentEditIndex >= 0 && document.getElementById('detailSheet').classList.contains('open') && !isEditMode) {
             renderDetailView(currentEditIndex);
         }
@@ -2378,6 +2418,106 @@
         openDetail(index);
     }
 
+    // ---------- 閱讀日曆（統計分頁） ----------
+    // 資料來自動態的「我的紀錄」：progress（看到 A → B）算看了幾話，read（本週已讀）只算有看
+    let calMonth = (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); })();
+    let calSelected = '';
+
+    // 「70話·外2·特3·後1」→ { main: 70, side: 2, special: 3, after: 1 }
+    function episodeFromLabel(label) {
+        const ep = {};
+        String(label || '').split('·').forEach(part => {
+            const main = part.match(/^(\d+)話$/);
+            if (main) { ep.main = Number(main[1]); return; }
+            const p = EPISODE_PARTS.find(x => x.short && part.startsWith(x.short));
+            const n = p && Number(part.slice(p.short.length));
+            if (p && Number.isInteger(n)) ep[p.key] = n;
+        });
+        return ep;
+    }
+
+    // 這筆紀錄看了幾話：每一段增加的話數加總（第一次記錄、往回改都算 0；新開始的一段算到那一話）
+    function episodesRead(e) {
+        if (e.type !== 'progress' || !e.from || !e.to) return 0;
+        const a = episodeFromLabel(e.from), b = episodeFromLabel(e.to);
+        return EPISODE_PARTS.reduce((n, { key }) => n + Math.max(0, (b[key] ?? 0) - (a[key] ?? 0)), 0); // 70話 → 70話·外1 算 1 話
+    }
+
+    // { 'YYYY-MM-DD': { eps, items: [紀錄], works: { 作品: 話數 } } }
+    function readingDays() {
+        const days = {};
+        ActivityLog.load().filter(e => e.src === 'me' && (e.type === 'progress' || e.type === 'read')).forEach(e => {
+            const day = toDateStr(new Date(e.at));
+            const d = days[day] || (days[day] = { eps: 0, items: [], works: {} });
+            const n = episodesRead(e);
+            d.eps += n;
+            d.items.push(e);
+            d.works[e.title] = (d.works[e.title] || 0) + n;
+        });
+        return days;
+    }
+
+    const calLevel = d => !d ? 0 : d.eps >= 10 ? 4 : d.eps >= 5 ? 3 : d.eps >= 2 ? 2 : 1;
+
+    function moveCalendar(step) {
+        calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + step, 1);
+        calSelected = '';
+        renderCalendar();
+    }
+
+    function selectCalendarDay(day) {
+        calSelected = calSelected === day ? '' : day;
+        renderCalendar();
+    }
+
+    function renderCalendar() {
+        const days = readingDays();
+        const y = calMonth.getFullYear(), m = calMonth.getMonth();
+        const today = toDateStr(new Date());
+        document.getElementById('calMonth').textContent = `${y} 年 ${m + 1} 月`;
+        const lead = (new Date(y, m, 1).getDay() + 6) % 7; // 週一開頭
+        const count = new Date(y, m + 1, 0).getDate();
+        const cells = ['一', '二', '三', '四', '五', '六', '日'].map(w => `<div class="cal-week">${w}</div>`);
+        for (let k = 0; k < lead; k++) cells.push('<div class="cal-cell empty"></div>');
+        for (let d = 1; d <= count; d++) {
+            const key = toDateStr(new Date(y, m, d));
+            const info = days[key];
+            const cls = [`lv${calLevel(info)}`, key === today && 'today', key === calSelected && 'selected', key > today && 'future'].filter(Boolean).join(' ');
+            cells.push(key > today
+                ? `<div class="cal-cell ${cls}">${d}</div>`
+                : `<button class="cal-cell ${cls}" onclick="selectCalendarDay('${key}')" aria-label="${m + 1}/${d}${info ? `，看了 ${info.eps} 話` : ''}">${d}</button>`);
+        }
+        document.getElementById('calGrid').innerHTML = cells.join('');
+
+        // 本月統計：幾話、幾部、最長連續、最常看
+        const monthKeys = Object.keys(days).filter(k => k.startsWith(`${y}-${String(m + 1).padStart(2, '0')}-`)).sort();
+        const eps = monthKeys.reduce((n, k) => n + days[k].eps, 0);
+        const works = {};
+        monthKeys.forEach(k => Object.entries(days[k].works).forEach(([t, n]) => { works[t] = (works[t] || 0) + n; }));
+        let streak = 0, best = 0, prev = null;
+        monthKeys.forEach(k => {
+            const t = new Date(k + 'T00:00:00').getTime();
+            streak = prev != null && t - prev === 864e5 ? streak + 1 : 1;
+            best = Math.max(best, streak);
+            prev = t;
+        });
+        const top = Object.entries(works).sort((a, b) => b[1] - a[1])[0];
+        const everRecorded = Object.keys(days).length > 0;
+        document.getElementById('calSummary').innerHTML = monthKeys.length
+            ? `本月看了 <b>${eps}</b> 話 · <b>${Object.keys(works).length}</b> 部作品 · 看了 <b>${monthKeys.length}</b> 天 · 最長連續 <b>${best}</b> 天`
+              + (top && top[1] ? `<br>最常看：<b>${escapeHtml(top[0])}</b>（${top[1]} 話）` : '')
+            : everRecorded ? '這個月沒有閱讀紀錄' : '按「+1 話」、改看到的話數、勾本週已讀之後，這裡就會開始記錄每天看了多少。';
+
+        const box = document.getElementById('calDay');
+        const sel = calSelected && days[calSelected];
+        if (!calSelected) { box.innerHTML = ''; return; }
+        const [, mm, dd] = calSelected.split('-').map(Number);
+        box.innerHTML = `<div class="cal-day"><div class="cal-day-title">${mm}/${dd}${sel ? `・看了 ${sel.eps} 話` : ''}</div>`
+            + (sel ? sel.items.map(e => `<div class="cal-day-row"><span class="t">${escapeHtml(e.title)}</span><span class="d">${escapeHtml(activityText(e))}</span></div>`).join('')
+                : '<div class="cal-day-row"><span class="d">這天沒有閱讀紀錄</span></div>')
+            + '</div>';
+    }
+
     function renderAll() {
         buildFilterOptions();
         renderStatusChips();
@@ -2387,6 +2527,7 @@
         renderStats();
         renderBackupBanner();
         renderActivity();
+        renderCalendar();
     }
 
     // ---------- 外觀 ----------
