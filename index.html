@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-7">
+    <link rel="stylesheet" href="common.css?v=20260926-8">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -178,6 +178,7 @@
         }
         .return-banner-inner span { flex: 1; }
         .return-banner-inner .btn { min-height: 36px; padding: 0 12px; font-size: 0.82rem; }
+        .backup-banner .return-banner-inner { background: var(--ep-bg); border-color: var(--primary); }
         .return-item { display: flex; align-items: center; gap: 12px; padding: 10px 2px; min-height: 56px; border-bottom: 1px solid var(--border); cursor: pointer; }
         .return-item:last-child { border-bottom: none; }
         .return-item:active { background: var(--raised); }
@@ -403,6 +404,7 @@
 </header>
 
 <div class="return-banner" id="returnBanner" hidden></div>
+<div class="return-banner backup-banner" id="backupBanner" hidden></div>
 
 <main class="page">
     <!-- 作品列表 -->
@@ -610,7 +612,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260926-7"></script>
+<script src="common.js?v=20260926-8"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added', view: 'list' }, Store.loadUi());
@@ -942,6 +944,30 @@
 
     // 首頁上方提醒：確定日期到了（按 ✕ 當天不再顯示）；區間只在剛進入時提醒一次（按 ✕ 後就不再提醒）
     function returnKey(r) { return `${r.title}|${r.returnFrom}`; }
+
+    // 備份提醒：上次備份之後有新的紀錄、而且超過 7 天才出現；按 ✕ 當天不再顯示
+    function renderBackupBanner() {
+        const banner = document.getElementById('backupBanner');
+        const remind = backupReminder();
+        if (!remind || ui.backupDismissed === toDateStr(new Date())) {
+            banner.hidden = true;
+            return;
+        }
+        const text = remind.days === null ? '💾 還沒下載過備份，資料只存在這支手機裡' : `💾 上次備份是 ${remind.days} 天前，之後有新的紀錄`;
+        banner.innerHTML = `
+            <div class="return-banner-inner">
+                <span>${text}</span>
+                <button class="btn btn-primary" onclick="downloadBackup()">下載備份</button>
+                <button class="icon-btn" style="width:36px;height:36px;font-size:1rem;" onclick="dismissBackupBanner()" aria-label="今天不再提醒">✕</button>
+            </div>`;
+        banner.hidden = false;
+    }
+
+    function dismissBackupBanner() {
+        ui.backupDismissed = toDateStr(new Date());
+        Store.saveUi(ui);
+        renderBackupBanner();
+    }
 
     function renderReturnBanner() {
         const today = toDateStr(new Date());
@@ -1697,6 +1723,8 @@
         a.click();
         a.remove();
         setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        Store.markBackedUp();
+        renderBackupBanner();
     }
 
     document.getElementById('filePicker').addEventListener('change', async e => {
@@ -1733,6 +1761,7 @@
         migrateReviews(allReviews);
         Store.saveReviews(allReviews);
         document.getElementById('memoArea').value = Store.loadMemo();
+        Store.markBackedUp(); // 匯入的資料就是備份檔的內容
         Sheets.closeTop();
         renderAll();
         loadCovers();
@@ -1771,6 +1800,7 @@
         renderWeekly();
         renderReturns();
         renderStats();
+        renderBackupBanner();
     }
 
     // ---------- 外觀 ----------

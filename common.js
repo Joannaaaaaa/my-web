@@ -42,6 +42,7 @@ const STORAGE_KEYS = {
     memo: 'my_review_memo',
     draft: 'comic_review_draft',
     ui: 'my_review_ui',
+    backupMeta: 'my_review_backup_meta', // { lastBackupAt, lastChangeAt }：備份提醒用
     commentTracker: 'comment_tracker', // 平台留言追蹤（platform-comments.html）
 };
 
@@ -527,22 +528,42 @@ function migrateReviews(list) {
     return changed;
 }
 
+// 資料有變動就記下時間，備份提醒用（作品、備忘錄、留言追蹤、封面）
+function markDataChanged() {
+    try {
+        const meta = JSON.parse(localStorage.getItem(STORAGE_KEYS.backupMeta) || '{}');
+        localStorage.setItem(STORAGE_KEYS.backupMeta, JSON.stringify({ ...meta, lastChangeAt: Date.now() }));
+    } catch (err) { /* 提醒用的資料壞掉不影響存檔 */ }
+}
+
+// 需要提醒備份嗎：上次備份之後有變動，而且距離上次備份 7 天以上（或從沒備份過）
+const BACKUP_REMIND_DAYS = 7;
+function backupReminder() {
+    const { lastBackupAt, lastChangeAt } = Store.loadBackupMeta();
+    if (!lastChangeAt || (lastBackupAt && lastChangeAt <= lastBackupAt)) return null;
+    const days = lastBackupAt ? Math.floor((Date.now() - lastBackupAt) / 864e5) : null;
+    if (days !== null && days < BACKUP_REMIND_DAYS) return null;
+    return { days };
+}
+
 const Store = {
     loadReviews() {
         const list = readJson(STORAGE_KEYS.reviews, []);
         if (migrateReviews(list)) this.saveReviews(list);
         return list;
     },
-    saveReviews(list) { localStorage.setItem(STORAGE_KEYS.reviews, JSON.stringify(list)); },
+    saveReviews(list) { localStorage.setItem(STORAGE_KEYS.reviews, JSON.stringify(list)); markDataChanged(); },
     loadMemo() { return localStorage.getItem(STORAGE_KEYS.memo) || ''; },
-    saveMemo(text) { localStorage.setItem(STORAGE_KEYS.memo, text); },
+    saveMemo(text) { localStorage.setItem(STORAGE_KEYS.memo, text); markDataChanged(); },
     loadDraft() { return readJson(STORAGE_KEYS.draft, null); },
     saveDraft(data) { localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(data)); },
     clearDraft() { localStorage.removeItem(STORAGE_KEYS.draft); },
     loadUi() { return readJson(STORAGE_KEYS.ui, {}); },
     saveUi(prefs) { localStorage.setItem(STORAGE_KEYS.ui, JSON.stringify(prefs)); },
     loadTracker() { return readJson(STORAGE_KEYS.commentTracker, null); },
-    saveTracker(data) { localStorage.setItem(STORAGE_KEYS.commentTracker, JSON.stringify(data)); },
+    saveTracker(data) { localStorage.setItem(STORAGE_KEYS.commentTracker, JSON.stringify(data)); markDataChanged(); },
+    loadBackupMeta() { return readJson(STORAGE_KEYS.backupMeta, {}); },
+    markBackedUp() { localStorage.setItem(STORAGE_KEYS.backupMeta, JSON.stringify({ ...this.loadBackupMeta(), lastBackupAt: Date.now() })); },
 };
 
 // ---------- 封面圖 ----------
@@ -571,9 +592,9 @@ const CoverStore = {
         });
     },
     get(id) { return this._run('readonly', s => s.get(id)); },
-    put(id, blob) { return this._run('readwrite', s => s.put(blob, id)); },
-    delete(id) { return this._run('readwrite', s => s.delete(id)); },
-    clear() { return this._run('readwrite', s => s.clear()); },
+    put(id, blob) { markDataChanged(); return this._run('readwrite', s => s.put(blob, id)); },
+    delete(id) { markDataChanged(); return this._run('readwrite', s => s.delete(id)); },
+    clear() { markDataChanged(); return this._run('readwrite', s => s.clear()); },
     getAll() {
         return this._run('readonly', s => {
             const map = new Map();
