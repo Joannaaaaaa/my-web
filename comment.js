@@ -115,7 +115,7 @@ app.get('/ridi-episodes', async (req, res) => {
     }
 });
 
-// 用標題查作品：Naver、Ridi、Naver Series 用韓文標題，台版 Webtoon 用中文標題
+// 用標題查作品：Naver、Ridi、Naver Series、Bomtoon 用韓文標題，台版 Webtoon 用中文標題
 // 回傳 [{ seriesId, title, author, edition }]；Ridi 只留漫畫（웹툰分類 1600），排除小說
 const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148';
 const DESKTOP_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36';
@@ -164,8 +164,15 @@ app.get('/search-series', async (req, res) => {
                 const [name, extra = ''] = decodeEntities(m[2]).split('\n');
                 results.push({ seriesId: m[1], title: name.trim(), author: '', edition: extra.includes('완결') && !extra.includes('미완결') ? '완결' : '' });
             }
+        } else if (platform === 'bomtoon') {
+            const r = await fetch(`https://www.bomtoon.com/api/balcony-search-api/search?searchText=${q}`, { headers: { 'user-agent': DESKTOP_UA } });
+            const data = await r.json();
+            results = (data.data?.results || []).filter(b => b.contentsType !== 'novel').map(b => ({
+                seriesId: b.alias, title: b.title, author: (b.author || []).join(', '),
+                edition: (b.title.match(/\[(완전판|개정판)\]/) || [])[1] || '',
+            }));
         } else {
-            return res.status(400).send('platform 必須是 naver、ridi、webtoon 或 series');
+            return res.status(400).send('platform 必須是 naver、ridi、webtoon、series 或 bomtoon');
         }
         res.json(results);
     } catch (error) {
@@ -341,11 +348,52 @@ async function seriesInfo(id) {
     };
 }
 
-const SERIES_INFO = { naver: naverInfo, ridi: ridiInfo, series: seriesInfo };
+// Bomtoon：作品頁（Next.js）的 __NEXT_DATA__ 有完整資料；作品編號是網址上的英文代號（detail/j_jinx）
+// 成人作品未登入時沒有 ssrDetail，改用 openGraphData（標題、封面、作者、話次標題），連載狀態未知
+const BOMTOON_DAY = { MONDAY: 'Mon', TUESDAY: 'Tue', WEDNESDAY: 'Wed', THURSDAY: 'Thu', FRIDAY: 'Fri', SATURDAY: 'Sat', SUNDAY: 'Sun' };
+async function bomtoonInfo(alias) {
+    const r = await fetch(`https://www.bomtoon.com/detail/${alias}`, { headers: { 'user-agent': DESKTOP_UA } });
+    if (!r.ok) throw new Error('找不到作品');
+    const html = await r.text();
+    const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+    const props = m ? JSON.parse(m[1]).props?.pageProps || {} : {};
+    const detail = props.ssrDetail;
+    const og = props.openGraphData;
+    if (!detail && !og?.title) throw new Error('找不到作品');
+    const people = { author: [], adapter: [], artist: [], studio: [] };
+    if (detail) {
+        for (const c of detail.creators || []) {
+            if (c.type === 'ORIGINAL') people.author.push(c.name);
+            else if (c.type === 'WRITER' || c.type === 'ADAPTER') people.adapter.push(c.name);
+            else if (c.type === 'ARTIST') people.artist.push(c.name);
+            else (STUDIO_RE.test(c.name) ? people.studio : people.artist).push(c.name);
+        }
+    } else {
+        String(og.creators || '').split(',').map(n => n.trim()).filter(Boolean)
+            .forEach(n => (STUDIO_RE.test(n) ? people.studio : people.artist).push(n));
+    }
+    const counter = createPartCounter();
+    [...((detail || og).episodes || [])].reverse().forEach(e => counter.add(e.title));
+    const latestParts = counter.result();
+    const schedule = (detail?.schedules || []).map(x => BOMTOON_DAY[String(x).replace('GROUP_SCHEDULE_', '')]).find(Boolean) || '';
+    return {
+        title: detail?.title || og.title,
+        url: `https://www.bomtoon.com/detail/${alias}`,
+        cover: og?.thumbnail?.imagePath || '',
+        latest: latestParts.main,
+        latestParts,
+        day: schedule,
+        finished: detail ? detail.status === 'COMPLETED' || !!detail.isComplete : false,
+        people,
+    };
+}
+
+const SERIES_INFO = { naver: naverInfo, ridi: ridiInfo, series: seriesInfo, bomtoon: bomtoonInfo };
 app.get('/series-info', async (req, res) => {
     const { platform, id } = req.query;
-    if (!SERIES_INFO[platform]) return res.status(400).send('platform 必須是 naver、ridi 或 series');
-    if (!/^\d+$/.test(id || '')) return res.status(400).send('id 格式錯誤');
+    if (!SERIES_INFO[platform]) return res.status(400).send('platform 必須是 naver、ridi、series 或 bomtoon');
+    const idPattern = platform === 'bomtoon' ? /^[A-Za-z0-9_-]+$/ : /^\d+$/;
+    if (!idPattern.test(id || '')) return res.status(400).send('id 格式錯誤');
     try {
         res.json({ platform, seriesId: id, ...(await SERIES_INFO[platform](id)) });
     } catch (error) {
@@ -354,7 +402,7 @@ app.get('/series-info', async (req, res) => {
 });
 
 // 封面圖轉發：瀏覽器要拿到圖片檔才能存進 IndexedDB，只允許平台的圖片網域
-const COVER_HOSTS = /(^|\.)(pstatic\.net|ridicdn\.net)$/;
+const COVER_HOSTS = /(^|\.)(pstatic\.net|ridicdn\.net|balcony\.studio)$/;
 app.get('/cover-image', async (req, res) => {
     let target;
     try { target = new URL(String(req.query.url || '')); } catch { return res.status(400).send('網址錯誤'); }

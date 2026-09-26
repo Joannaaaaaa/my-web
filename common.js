@@ -682,8 +682,8 @@ const API_BASE_URL = globalThis.location?.protocol === 'https:'
     // localhost 會指到手機自己，所以要用 location.hostname
     : `http://${globalThis.location?.hostname || 'localhost'}:3000`;
 
-// App 平台名稱 → 伺服器的平台代號；Kakao、Bomtoon 目前不支援
-const AUTOFILL_PLATFORMS = { "Naver": 'naver', "Ridibooks": 'ridi', "Naver Series": 'series' };
+// App 平台名稱 → 伺服器的平台代號；Kakao 會擋伺服器的請求，目前不支援
+const AUTOFILL_PLATFORMS = { "Naver": 'naver', "Ridibooks": 'ridi', "Naver Series": 'series', "Bomtoon": 'bomtoon' };
 
 // 從作品網址取出作品編號，認不出來回傳空字串
 function workIdFromLink(platform, url) {
@@ -692,6 +692,7 @@ function workIdFromLink(platform, url) {
         "Naver": /comic\.naver\.com\/.*[?&]titleId=(\d+)/,
         "Ridibooks": /ridibooks\.com\/books\/(\d+)/,
         "Naver Series": /series\.naver\.com\/.*[?&]productNo=(\d+)/,
+        "Bomtoon": /bomtoon\.com\/detail\/([A-Za-z0-9_-]+)/,
     };
     const m = patterns[platform] && u.match(patterns[platform]);
     return m ? m[1] : '';
