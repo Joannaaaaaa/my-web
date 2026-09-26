@@ -5,6 +5,7 @@ const PLATFORM_CONFIG = {
     "Ridibooks": { color: "#00a0e9", short: "Ridi", search: kw => `https://ridibooks.com/search?q=${kw}` },
     "Kakao": { color: "#ffcd00", short: "Kakao", search: kw => `https://page.kakao.com/search/result?keyword=${kw}` },
     "Naver": { color: "#03cf5d", short: "Naver", search: kw => `https://comic.naver.com/search?keyword=${kw}` },
+    "Naver Series": { color: "#00a38c", short: "Series", search: kw => `https://series.naver.com/search/search.series?t=all&fs=comic&q=${kw}` },
     "Bomtoon": { color: "#ff4d6a", short: "Bom", search: kw => `https://www.bomtoon.com/search?q=${kw}` },
 };
 const PLATFORMS = Object.keys(PLATFORM_CONFIG);
