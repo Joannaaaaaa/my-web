@@ -5,7 +5,7 @@ const PLATFORM_CONFIG = {
     "Ridibooks": { color: "#00a0e9", short: "Ridi", search: kw => `https://ridibooks.com/search?q=${kw}` },
     "Kakao": { color: "#ffcd00", short: "Kakao", search: kw => `https://page.kakao.com/search/result?keyword=${kw}` },
     "Naver": { color: "#03cf5d", short: "Naver", search: kw => `https://comic.naver.com/search?keyword=${kw}` },
-    "Naver Series": { color: "#00a38c", short: "Series", search: kw => `https://series.naver.com/search/search.series?t=all&fs=comic&q=${kw}` },
+    "Naver Series": { color: "#00a38c", short: "Series", search: kw => `https://series.naver.com/search/search.series?t=comic&q=${kw}` },
     "Bomtoon": { color: "#ff4d6a", short: "Bom", search: kw => `https://www.bomtoon.com/search?q=${kw}` },
 };
 const PLATFORMS = Object.keys(PLATFORM_CONFIG);
@@ -673,6 +673,78 @@ if (typeof window !== 'undefined' && window.matchMedia) {
     window.matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => applyTheme());
 }
 
+// ---------- 從平台自動填入（透過 comment.js 伺服器） ----------
+
+// 瀏覽器不能直接呼叫各平台的 API（沒開 CORS、需要特殊標頭），所以透過 comment.js 伺服器轉發
+const API_BASE_URL = globalThis.location?.protocol === 'https:'
+    ? 'https://webtoon-api-e0vg.onrender.com'
+    // 本機測試：連「打開網頁的那台電腦」的 3000 port。手機用筆電 IP 打開時，
+    // localhost 會指到手機自己，所以要用 location.hostname
+    : `http://${globalThis.location?.hostname || 'localhost'}:3000`;
+
+// App 平台名稱 → 伺服器的平台代號；Kakao、Bomtoon 目前不支援
+const AUTOFILL_PLATFORMS = { "Naver": 'naver', "Ridibooks": 'ridi', "Naver Series": 'series' };
+
+// 從作品網址取出作品編號，認不出來回傳空字串
+function workIdFromLink(platform, url) {
+    const u = String(url || '');
+    const patterns = {
+        "Naver": /comic\.naver\.com\/.*[?&]titleId=(\d+)/,
+        "Ridibooks": /ridibooks\.com\/books\/(\d+)/,
+        "Naver Series": /series\.naver\.com\/.*[?&]productNo=(\d+)/,
+    };
+    const m = patterns[platform] && u.match(patterns[platform]);
+    return m ? m[1] : '';
+}
+
+// 比對標題用：去掉空白、[독점] 這類括號、大小寫
+function titleKey(title) {
+    return String(title || '').replace(/\[[^\]]*\]|\([^)]*\)/g, '').replace(/\s+/g, '').toLowerCase();
+}
+
+// 平台標題去掉 [독점]、[완전판] 這類標記，當成韓文標題
+function cleanPlatformTitle(title) {
+    return String(title || '').replace(/\s*\[[^\]]*\]\s*/g, ' ').trim();
+}
+
+async function serverApi(path) {
+    const res = await fetch(API_BASE_URL + path);
+    if (!res.ok) throw new Error((await res.text().catch(() => '')) || `HTTP ${res.status}`);
+    return res.json();
+}
+
+const Autofill = {
+    // 回傳 [{ seriesId, title, author, edition }]
+    search: (platform, keyword) =>
+        serverApi(`/search-series?platform=${AUTOFILL_PLATFORMS[platform]}&keyword=${encodeURIComponent(keyword)}`),
+    // 回傳 { url, title, cover, latest, day, finished, people: { author, adapter, artist, studio } }
+    info: (platform, id) => serverApi(`/series-info?platform=${AUTOFILL_PLATFORMS[platform]}&id=${encodeURIComponent(id)}`),
+    // 下載封面、裁切壓縮後存進 IndexedDB，回傳新的 coverId
+    async saveCover(url) {
+        const res = await fetch(`${API_BASE_URL}/cover-image?url=${encodeURIComponent(url)}`);
+        if (!res.ok) throw new Error('抓取封面失敗');
+        const blob = await makeCoverBlob(await res.blob());
+        const id = newCoverId();
+        await CoverStore.put(id, blob);
+        return id;
+    },
+    // 沒有網址時用標題找：只有「去掉空白與括號後完全相同」且只有一部時才算找到
+    async findExact(platform, keyword) {
+        const key = titleKey(keyword);
+        if (!key) return null;
+        const hits = (await Autofill.search(platform, keyword)).filter(r => titleKey(r.title) === key);
+        return hits.length === 1 ? hits[0] : null;
+    },
+    // 伺服器在休眠時第一次要等比較久，超過幾秒就提示
+    slowHint(onSlow, ms = 4000) {
+        const t = setTimeout(onSlow, ms);
+        return () => clearTimeout(t);
+    },
+};
+
+// 平台資料的人員 → 表單欄位（原作／글／그림／製作團隊）
+const AUTOFILL_PEOPLE_KEYS = ['author', 'adapter', 'artist', 'studio'];
+
 // ---------- 漫畫表單元件 ----------
 
 /**
@@ -708,6 +780,17 @@ function createReviewForm(container, options = {}) {
         <div class="form-section">
             <label class="form-label">한국어 제목</label>
             <input class="input" data-field="krTitle" placeholder="예: 상류사회" lang="ko">
+        </div>
+        <div class="form-section autofill">
+            <button type="button" class="btn autofill-btn" data-role="af-open">🔎 從平台自動填入</button>
+            <div class="autofill-panel" data-role="af-panel" hidden>
+                <div class="form-hint">選平台：有填作品網址就直接查，沒有就用韓文標題搜尋。只會填空白的欄位，平台最新話數會更新成平台上的數字。</div>
+                <div class="chip-group">
+                    ${Object.keys(AUTOFILL_PLATFORMS).map(p => `<button type="button" class="chip" data-af-platform="${p}" style="--opt-color: ${platformColor(p)}">${p}</button>`).join('')}
+                </div>
+                <div class="autofill-status" data-role="af-status" aria-live="polite"></div>
+                <div class="autofill-results" data-role="af-results"></div>
+            </div>
         </div>
         <div class="form-section">
             <label class="form-label">備註</label>
@@ -874,7 +957,131 @@ function createReviewForm(container, options = {}) {
     // 沒有封面時，佔位圖顯示標題第一個字
     $('[data-field="title"]').addEventListener('input', () => { if (!state.coverId) refreshCover(); });
 
+    // ---------- 從平台自動填入 ----------
+    let afPlatform = '';
+    let afToken = 0; // 查詢期間又按了別的，舊的結果就丟掉
+    function afStatus(text, cls = '') {
+        const el = $('[data-role="af-status"]');
+        el.textContent = text;
+        el.className = 'autofill-status' + (cls ? ' ' + cls : '');
+    }
+    function afReset() {
+        afToken++;
+        afPlatform = '';
+        $('[data-role="af-panel"]').hidden = true;
+        $('[data-role="af-results"]').innerHTML = '';
+        afStatus('');
+        container.querySelectorAll('[data-af-platform]').forEach(b => b.classList.remove('selected'));
+    }
+    async function afWait(promise, token) {
+        const stop = Autofill.slowHint(() => {
+            if (token === afToken) afStatus('查詢中…伺服器可能在休眠，第一次最多要等 1 分鐘');
+        });
+        try { return await promise; } finally { stop(); }
+    }
+    async function afRun(platform) {
+        const token = ++afToken;
+        afPlatform = platform;
+        container.querySelectorAll('[data-af-platform]').forEach(b => b.classList.toggle('selected', b.dataset.afPlatform === platform));
+        $('[data-role="af-results"]').innerHTML = '';
+        const id = workIdFromLink(platform, $(`[data-link="${platform}"]`).value);
+        if (id) return afApply(platform, id, token);
+        const keyword = $('[data-field="krTitle"]').value.trim() || cleanTitleBrackets($('[data-field="title"]').value);
+        if (!keyword) return afStatus('先填韓文標題（或漫畫名稱）再查', 'bad');
+        afStatus(`在 ${platform} 搜尋「${keyword}」…`);
+        let results;
+        try {
+            results = await afWait(Autofill.search(platform, keyword), token);
+        } catch (err) {
+            if (token === afToken) afStatus(`查詢失敗：${err.message === 'Failed to fetch' ? '連不上伺服器' : err.message}`, 'bad');
+            return;
+        }
+        if (token !== afToken) return;
+        if (!results.length) return afStatus(`${platform} 找不到「${keyword}」，可以改韓文標題再試，或直接貼作品網址`, 'bad');
+        afStatus(`找到 ${results.length} 部，點選正確的作品：`);
+        $('[data-role="af-results"]').innerHTML = results.slice(0, 10).map(r => `
+            <button type="button" class="autofill-result" data-af-pick="${escapeHtml(r.seriesId)}">
+                <span class="autofill-result-title">${escapeHtml(r.title)}</span>
+                ${r.edition ? `<span class="autofill-result-tag">${escapeHtml(r.edition)}</span>` : ''}
+                ${r.author ? `<span class="autofill-result-sub">${escapeHtml(r.author)}</span>` : ''}
+            </button>`).join('');
+    }
+    async function afApply(platform, id, token = ++afToken) {
+        $('[data-role="af-results"]').innerHTML = '';
+        afStatus('讀取作品資料…');
+        let info;
+        try {
+            info = await afWait(Autofill.info(platform, id), token);
+        } catch (err) {
+            if (token === afToken) afStatus(`查詢失敗：${err.message === 'Failed to fetch' ? '連不上伺服器' : err.message}`, 'bad');
+            return;
+        }
+        if (token !== afToken) return;
+        const filled = [];
+        const notes = [];
+        if (!state.platforms.includes(platform)) state.platforms = [...state.platforms, platform];
+        const linkEl = $(`[data-link="${platform}"]`);
+        if (!linkEl.value.trim()) { linkEl.value = info.url; filled.push('作品網址'); }
+        const krEl = $('[data-field="krTitle"]');
+        if (!krEl.value.trim() && info.title) { krEl.value = cleanPlatformTitle(info.title); filled.push('韓文標題'); }
+        let people = 0;
+        AUTOFILL_PEOPLE_KEYS.forEach(key => {
+            const el = $(`[data-field="${key}"]`);
+            const names = info.people?.[key] || [];
+            if (!el.value.trim() && names.length) { el.value = names.join('、'); people += names.length; }
+        });
+        if (people) {
+            filled.push('創作團隊');
+            container.querySelector('.team-details').open = true;
+        }
+        if (info.latest) {
+            const episode = {};
+            container.querySelectorAll('[data-ep]').forEach(el => { if (/^\d+$/.test(el.value.trim())) episode[el.dataset.ep] = Number(el.value); });
+            if (currentEpisodePart(episode).key === 'main') {
+                $('[data-role="latest"]').value = info.latest;
+                filled.push(`最新 ${info.latest} 話`);
+            } else {
+                notes.push(`平台最新是第 ${info.latest} 話，你在看外傳／後記，所以沒有改最新話數`);
+            }
+        }
+        if (!state.updateDay && info.day && !info.finished) { state.updateDay = info.day; filled.push(`更新日 ${DAY_MAP[info.day]}`); }
+        if (info.finished) notes.push('平台顯示已完結');
+        changed();
+        if (!state.coverId && info.cover) {
+            afStatus('下載封面…');
+            coverBusy = true;
+            try {
+                state.coverId = await Autofill.saveCover(info.cover);
+                await refreshCover();
+                filled.push('封面');
+                changed();
+            } catch (err) {
+                notes.push('封面下載失敗，可以自己上傳');
+            } finally {
+                coverBusy = false;
+            }
+        }
+        if (token !== afToken) return;
+        afStatus([
+            filled.length ? `✅ 已填入：${filled.join('、')}` : '沒有需要填的欄位（已填的不會被覆蓋）',
+            ...notes,
+        ].join('\n'), 'ok');
+    }
+
+    $('[data-role="af-open"]').addEventListener('click', () => {
+        const panel = $('[data-role="af-panel"]');
+        if (!panel.hidden) return afReset();
+        panel.hidden = false;
+        // 只勾了一個支援的平台時直接查
+        const supported = state.platforms.filter(p => AUTOFILL_PLATFORMS[p]);
+        if (supported.length === 1) afRun(supported[0]);
+    });
+
     container.addEventListener('click', e => {
+        const afBtn = e.target.closest('button[data-af-platform]');
+        if (afBtn) return afRun(afBtn.dataset.afPlatform);
+        const pick = e.target.closest('button[data-af-pick]');
+        if (pick) return afApply(afPlatform, pick.dataset.afPick);
         const toggle = e.target.closest('button[data-toggle="twWebtoon"]');
         if (toggle) {
             state.twWebtoon = !state.twWebtoon;
@@ -949,6 +1156,7 @@ function createReviewForm(container, options = {}) {
         state.rating = ratingValue(data.rating);
         state.coverId = data.coverId || '';
         state.twWebtoon = !!data.twWebtoon;
+        afReset();
         refreshCover();
         refreshChips();
         markClean();

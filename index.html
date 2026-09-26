@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-9">
+    <link rel="stylesheet" href="common.css?v=20260926-10">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -364,6 +364,7 @@
         .cleanup-rows .k { color: var(--text-muted); margin-right: 6px; }
         .cleanup-rows .old { color: var(--text-muted); text-decoration: line-through; }
         .cleanup-flag { color: var(--flag-text); }
+        .sync-intro { color: var(--text-sub); font-size: 0.88rem; line-height: 1.7; margin: 0 0 12px; }
         .cleanup-notes { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; }
         .cleanup-notes li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         /* 長文字收合 */
@@ -494,6 +495,7 @@
     <div class="sheet-handle"></div>
     <button class="menu-item" onclick="downloadBackup()">💾 下載備份</button>
     <button class="menu-item" onclick="openCleanup()">🧹 整理舊資料</button>
+    <button class="menu-item" onclick="openSync()">🔄 更新平台資料</button>
     <button class="menu-item" id="themeMenuItem" onclick="cycleTheme()">🌓 外觀：跟隨手機</button>
     <button class="menu-item" onclick="document.getElementById('filePicker').click()">📤 匯入備份</button>
     <a class="menu-item" href="platform-comments.html">💬 查詢平台留言</a>
@@ -543,6 +545,19 @@
     <div class="fullsheet-body" id="cleanupBody"></div>
     <div class="fullsheet-footer">
         <button class="btn btn-primary" style="flex:1;" id="cleanupApply" onclick="applyCleanup()">套用</button>
+    </div>
+</div>
+
+<!-- 更新平台資料（最新話數、網址、封面、創作團隊） -->
+<div class="fullsheet" id="syncSheet">
+    <div class="fullsheet-header">
+        <button class="icon-btn" onclick="Sheets.closeTop()" aria-label="關閉">✕</button>
+        <div class="sheet-title">更新平台資料</div>
+        <button class="btn btn-ghost" style="min-height:38px;" id="syncToggleAll" onclick="toggleAllSync()" hidden>全選／全不選</button>
+    </div>
+    <div class="fullsheet-body" id="syncBody"></div>
+    <div class="fullsheet-footer">
+        <button class="btn btn-primary" style="flex:1;" id="syncApply" onclick="syncMainAction()">開始查詢</button>
     </div>
 </div>
 
@@ -612,7 +627,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260926-9"></script>
+<script src="common.js?v=20260926-10"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added', view: 'list' }, Store.loadUi());
@@ -1591,6 +1606,199 @@
         Sheets.closeTop();
         renderAll();
         showToast(`已整理 ${items.length} 部作品，整理前備份已下載`);
+    }
+
+    // ---------- 更新平台資料 ----------
+    // 有 Naver／Ridi／Naver Series 的作品：有網址直接查，沒網址用韓文標題找「完全同名且只有一部」的作品
+    // 只填空白欄位；最新話數只在看本篇、狀態是連載中／休刊／想看時更新。查完先列出變動，勾選後才套用
+    const SYNC_LATEST_STATUSES = ['連載中', '休刊', '想看'];
+    const SYNC_CONCURRENCY = 3;
+    let syncPlan = [];
+    let syncFailed = [];
+    let syncStage = 'intro'; // intro → running → review
+    let syncToken = 0;
+
+    function syncTargets() {
+        return allReviews.map((r, index) => ({ r, index })).filter(({ r }) => (r.platforms || []).some(p => AUTOFILL_PLATFORMS[p]));
+    }
+
+    function openSync() {
+        syncToken++;
+        syncStage = 'intro';
+        const n = syncTargets().length;
+        document.getElementById('syncBody').innerHTML = `
+            <p class="sync-intro">
+                會查 <b>${n}</b> 部有 Naver、Ridi 或 Naver Series 的作品：<br>
+                ・有填作品網址的直接查；沒填的用韓文標題找完全同名的作品，找到會補上網址<br>
+                ・只補空白的欄位：網址、韓文標題、封面、創作團隊、更新日<br>
+                ・平台最新話數：看本篇、而且是連載中／休刊／想看的作品才更新<br>
+                查完會先列出變動，勾選後才會套用。第一次要等伺服器醒來，最多約 1 分鐘。
+            </p>`;
+        document.getElementById('syncToggleAll').hidden = true;
+        const btn = document.getElementById('syncApply');
+        btn.disabled = n === 0;
+        btn.textContent = n ? `開始查詢（${n} 部）` : '沒有可以查的作品';
+        Sheets.open('syncSheet');
+    }
+
+    function syncMainAction() {
+        if (syncStage === 'intro') runSync();
+        else if (syncStage === 'review') applySync();
+    }
+
+    async function syncOne({ r, index }) {
+        const supported = r.platforms.filter(p => AUTOFILL_PLATFORMS[p]);
+        const linked = supported.find(p => workIdFromLink(p, (r.links || {})[p]));
+        let platform = linked;
+        let id = linked && workIdFromLink(linked, r.links[linked]);
+        if (!id) {
+            const keyword = (r.krTitle || '').trim();
+            if (!keyword) return { failed: '沒有韓文標題，也沒有作品網址' };
+            for (const p of supported) {
+                const hit = await Autofill.findExact(p, keyword);
+                if (hit) { platform = p; id = hit.seriesId; break; }
+            }
+            if (!id) return { failed: `${supported.map(p => PLATFORM_CONFIG[p].short).join('／')} 找不到同名作品，請在編輯頁按「從平台自動填入」手動選` };
+        }
+        const info = await Autofill.info(platform, id);
+        const next = {};
+        const rows = [];
+        const flags = [];
+        if (!workIdFromLink(platform, (r.links || {})[platform])) {
+            next.links = { ...(r.links || {}), [platform]: info.url };
+            rows.push(['網址', `${PLATFORM_CONFIG[platform].short}：${cleanPlatformTitle(info.title)}`]);
+        }
+        if (!(r.krTitle || '').trim() && info.title) {
+            next.krTitle = cleanPlatformTitle(info.title);
+            rows.push(['韓文標題', next.krTitle]);
+        }
+        AUTOFILL_PEOPLE_KEYS.forEach(key => {
+            const names = info.people?.[key] || [];
+            if (!(r[key] || '').trim() && names.length) {
+                next[key] = names.join('、');
+                rows.push([JOB_KEYS.find(j => j.key === key).label, next[key]]);
+            }
+        });
+        const status = r.status || DEFAULT_STATUS;
+        const part = currentEpisodePart(normalizeEpisode(r.episode) || {}).key;
+        const oldLatest = latestEpisode(r);
+        if (info.latest && SYNC_LATEST_STATUSES.includes(status) && part === 'main' && (!oldLatest || oldLatest.part !== 'main' || oldLatest.n !== info.latest)) {
+            next.latest = { n: info.latest, part: 'main', asOf: toDateStr(new Date()) };
+            rows.push(['最新話數', oldLatest ? `<span class="old">${oldLatest.n}</span> → ${info.latest}` : String(info.latest), true]);
+        }
+        if (status === DEFAULT_STATUS && !r.updateDay && info.day && !info.finished) {
+            next.updateDay = info.day;
+            rows.push(['更新日', DAY_MAP[info.day]]);
+        }
+        const coverUrl = !r.coverId && info.cover ? info.cover : '';
+        if (coverUrl) rows.push(['封面', '下載平台封面']);
+        if (info.finished && (status === DEFAULT_STATUS || status === '休刊')) flags.push('平台顯示已完結，要不要改狀態？');
+        return { index, platform, next, rows, flags, coverUrl };
+    }
+
+    async function runSync() {
+        const token = ++syncToken;
+        syncStage = 'running';
+        const targets = syncTargets();
+        const body = document.getElementById('syncBody');
+        const btn = document.getElementById('syncApply');
+        btn.disabled = true;
+        let done = 0;
+        const progress = () => {
+            btn.textContent = `查詢中 ${done} / ${targets.length}…`;
+            body.innerHTML = `<p class="sync-intro">查詢中 ${done} / ${targets.length}…${done === 0 ? '<br>伺服器在休眠的話，第一次最多要等 1 分鐘' : ''}</p>`;
+        };
+        progress();
+        const results = [];
+        const queue = [...targets];
+        await Promise.all(Array.from({ length: SYNC_CONCURRENCY }, async () => {
+            while (queue.length && token === syncToken) {
+                const target = queue.shift();
+                try {
+                    results.push({ target, ...(await syncOne(target)) });
+                } catch (err) {
+                    results.push({ target, failed: err.message === 'Failed to fetch' ? '連不上伺服器' : `查詢失敗（${err.message}）` });
+                }
+                done++;
+                if (token === syncToken) progress();
+            }
+        }));
+        if (token !== syncToken) return;
+        const order = r => r.target.index;
+        syncPlan = results.filter(x => !x.failed && (x.rows.length || x.flags.length)).sort((a, b) => order(a) - order(b));
+        syncFailed = results.filter(x => x.failed).sort((a, b) => order(a) - order(b));
+        syncStage = 'review';
+        renderSyncReview(results.length);
+    }
+
+    function renderSyncReview(total) {
+        const body = document.getElementById('syncBody');
+        const unchanged = total - syncPlan.length - syncFailed.length;
+        body.innerHTML = `
+            <p class="sync-intro">查了 ${total} 部：${syncPlan.length} 部有變動、${unchanged} 部已是最新${syncFailed.length ? `、${syncFailed.length} 部沒查到` : ''}。取消勾選的作品不會變動。</p>
+            ${syncPlan.map((p, k) => {
+                const r = allReviews[p.index];
+                const canApply = p.rows.length > 0;
+                return `
+                    <div class="cleanup-item">
+                        <label class="cleanup-title">${canApply ? `<input type="checkbox" data-sync="${k}" checked onchange="updateSyncButton()">` : ''}${escapeHtml(r.title)}</label>
+                        <div class="cleanup-rows">
+                            ${p.rows.map(([k2, v, html]) => `<div><span class="k">${escapeHtml(k2)}</span>${html ? v : escapeHtml(v)}</div>`).join('')}
+                            ${p.flags.map(f => `<div class="cleanup-flag">⚠️ ${escapeHtml(f)}</div>`).join('')}
+                        </div>
+                    </div>`;
+            }).join('')}
+            ${syncFailed.length ? `
+                <div class="year-section-title" style="margin-top: 16px;">沒查到的作品</div>
+                ${syncFailed.map(x => `
+                    <div class="cleanup-item">
+                        <div class="cleanup-title">${escapeHtml(allReviews[x.target.index].title)}</div>
+                        <div class="cleanup-rows"><div>${escapeHtml(x.failed)}</div></div>
+                    </div>`).join('')}` : ''}`;
+        document.getElementById('syncToggleAll').hidden = !syncPlan.some(p => p.rows.length);
+        body.scrollTop = 0;
+        updateSyncButton();
+    }
+
+    function checkedSyncItems() {
+        return Array.from(document.querySelectorAll('#syncBody input[data-sync]:checked')).map(el => syncPlan[el.dataset.sync]);
+    }
+
+    function updateSyncButton() {
+        const n = checkedSyncItems().length;
+        const btn = document.getElementById('syncApply');
+        btn.disabled = n === 0;
+        btn.textContent = n ? `套用（${n} 部）` : '沒有要套用的變動';
+    }
+
+    function toggleAllSync() {
+        const boxes = document.querySelectorAll('#syncBody input[data-sync]');
+        const allOn = Array.from(boxes).every(b => b.checked);
+        boxes.forEach(b => { b.checked = !allOn; });
+        updateSyncButton();
+    }
+
+    async function applySync() {
+        const items = checkedSyncItems();
+        if (!items.length) return;
+        const token = ++syncToken;
+        const btn = document.getElementById('syncApply');
+        btn.disabled = true;
+        let coverFailed = 0;
+        for (const [k, p] of items.entries()) {
+            btn.textContent = `套用中 ${k + 1} / ${items.length}…`;
+            const next = { ...p.next };
+            if (p.coverUrl) {
+                try { next.coverId = await Autofill.saveCover(p.coverUrl); } catch { coverFailed++; }
+            }
+            if (token !== syncToken) return; // 套用期間關掉了：已下載的封面不會掛上，其他不變
+            allReviews[p.index] = { ...allReviews[p.index], ...next };
+        }
+        Store.saveReviews(allReviews);
+        syncStage = 'done';
+        Sheets.closeTop();
+        renderAll();
+        showToast(`已更新 ${items.length} 部作品${coverFailed ? `，${coverFailed} 張封面下載失敗` : ''}`);
     }
 
     // ---------- 創作者頁 ----------

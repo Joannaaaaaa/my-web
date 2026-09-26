@@ -252,3 +252,18 @@ a.tag-link:active { background: var(--raised); }
 @media (min-width: 640px) {
     .team-grid { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* 從平台自動填入 */
+.autofill-btn { width: 100%; }
+.autofill-panel { margin-top: 10px; display: grid; gap: 10px; }
+.autofill-status { font-size: 0.85rem; color: var(--text-sub); white-space: pre-line; }
+.autofill-status:empty { display: none; }
+.autofill-status.ok { color: var(--text); }
+.autofill-status.bad { color: var(--danger, #e5484d); }
+.autofill-results { display: grid; gap: 6px; }
+.autofill-result { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; width: 100%; text-align: left; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--card-bg); color: var(--text); font: inherit; cursor: pointer; }
+.autofill-result:active { background: var(--border); }
+.autofill-result-title { font-weight: bold; }
+.autofill-result-tag { font-size: 0.75rem; color: var(--primary); }
+.autofill-result-sub { flex-basis: 100%; font-size: 0.8rem; color: var(--text-sub); }

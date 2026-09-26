@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-9">
+    <link rel="stylesheet" href="common.css?v=20260926-10">
     <style>
         body { padding-bottom: calc(24px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -275,15 +275,9 @@
     <div class="form-hint">平常更新只重新檢查 90 天內的留言；這個會檢查全部，比較久。</div>
 </div>
 
-<script src="common.js?v=20260926-9"></script>
+<script src="common.js?v=20260926-10"></script>
 <script>
-    // 瀏覽器不能直接呼叫各平台的 API（沒開 CORS、需要特殊標頭），所以透過 comment.js 伺服器轉發
-    const API_BASE_URL = window.location.protocol === 'https:'
-        ? 'https://webtoon-api-e0vg.onrender.com'
-        // 本機測試：連「打開網頁的那台電腦」的 3000 port。手機用筆電 IP 打開時，
-        // localhost 會指到手機自己，所以要用 location.hostname
-        : `http://${location.hostname || 'localhost'}:3000`;
-
+    // API_BASE_URL 在 common.js
     const PLATFORM_INFO = {
         webtoon: { label: 'Webtoon', color: '#00d564', pageId: (s, n) => `w_${s.seriesId}_${n}` },
         naver: { label: 'Naver', color: '#03cf5d', pageId: (s, n) => `webtoon_${s.seriesId}_${n}` },
