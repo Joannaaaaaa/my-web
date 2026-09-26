@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260927-4">
+    <link rel="stylesheet" href="common.css?v=20260927-5">
     <style>
         body { padding-bottom: calc(80px + var(--safe-bottom)); } /* 留空間給底部分頁列 */
         body.no-scroll { overflow: hidden; }
@@ -332,7 +332,7 @@
     <div class="form-hint">平常更新只重新檢查 90 天內的留言；這個會檢查全部，比較久。</div>
 </div>
 
-<script src="common.js?v=20260927-4"></script>
+<script src="common.js?v=20260927-5"></script>
 <script>
     // API_BASE_URL 在 common.js
     const PLATFORM_INFO = {
@@ -394,10 +394,20 @@
     let cancelled = false;
     const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    async function api(path) {
+    // 逾時、連不上、平台出錯（502／503／504）自動再試一次；404（這一話不存在）不重試
+    async function api(path, retry = 1) {
         if (cancelled) throw new Cancelled();
-        const res = await fetch(API_BASE_URL + path);
+        let res;
+        try {
+            res = await fetch(API_BASE_URL + path);
+        } catch (err) {
+            if (retry > 0) { await sleep(1500); return api(path, retry - 1); }
+            const e = new Error('連不上伺服器');
+            e.status = 0;
+            throw e;
+        }
         if (!res.ok) {
+            if ([502, 503, 504].includes(res.status) && retry > 0) { await sleep(1500); return api(path, retry - 1); }
             const err = new Error((await res.text()) || `HTTP ${res.status}`);
             err.status = res.status;
             throw err;
@@ -557,8 +567,8 @@
             try {
                 data = await api(`/get-comments?${q}`);
             } catch (err) {
-                // Naver／Webtoon 還沒出的話數，伺服器會回 500
-                if (page === 1 && platform !== 'ridi' && err.status === 500) return null;
+                // Naver／Webtoon 還沒出的話數：伺服器回 404（舊版伺服器所有錯誤都回 500「抓取失敗」，也當成不存在）
+                if (page === 1 && platform !== 'ridi' && (err.status === 404 || (err.status === 500 && err.message === '抓取失敗'))) return null;
                 throw err;
             }
             let list, more;
@@ -589,7 +599,17 @@
 
     // 掃一話，找出我的留言（主留言，或回覆在別人底下的留言）
     // discover：找新留言，要檢查所有有回覆的留言；recheck：只看我的留言與我回覆過的那幾則
+    // 查詢失敗時標上是哪一話，錯誤訊息才知道停在哪
     async function scanEpisode(source, ep, mode) {
+        try {
+            return await scanEpisodeInner(source, ep, mode);
+        } catch (err) {
+            if (!(err instanceof Cancelled) && err.ep == null) err.ep = ep;
+            throw err;
+        }
+    }
+
+    async function scanEpisodeInner(source, ep, mode) {
         const platform = source.platform;
         const pageId = platform === 'ridi'
             ? await ridiEpisodeId(source, ep)
@@ -712,10 +732,11 @@
                     }
                 } catch (err) {
                     if (err instanceof Cancelled) throw err;
-                    const msg = err.status === 404 && source.platform === 'ridi'
+                    const msg = err.status === 404 && source.platform === 'ridi' && !err.ep
                         ? '伺服器還沒更新（需要 push 讓 Render 重新部署）'
                         : err.message === 'Failed to fetch' ? '連不上伺服器' : err.message;
-                    errors.push(`${source.name}：${msg}`);
+                    const where = err.ep != null ? `${episodeLabelOf(source, err.ep)}（網址第 ${err.ep + (Number(source.offset) || 0)} 號）查詢失敗` : '查詢失敗';
+                    errors.push(`${source.name}：${where}：${msg}。前面掃完的都有存下來，稍後再按一次就好`);
                 }
             }
         } catch (err) {

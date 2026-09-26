@@ -7,6 +7,15 @@ const app = express();
 // 💡 允許你的前端網頁 (不論是本機打開還是部署在 GitHub Pages) 跨網域存取
 
 app.use(cors()); // 允許你的前端網頁存取這個後端
+axios.defaults.timeout = 20000; // 平台太久沒回應就放棄，免得一直卡住
+
+// 平台錯誤轉給網頁：404＝這一話不存在（還沒出），其他是逾時或平台出錯（網頁會顯示「查詢失敗」）
+function sendUpstreamError(res, error, what) {
+    const status = error.response?.status;
+    if (status === 404) return res.status(404).send('這一話不存在');
+    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') return res.status(504).send('平台回應逾時');
+    res.status(502).send(`${what}失敗${status ? `（平台回應 ${status}）` : ''}`);
+}
 app.get('/get-comments', async (req, res) => {
     try {
         // 新增接收 offsetPostId 參數
@@ -42,7 +51,7 @@ app.get('/get-comments', async (req, res) => {
         }
         res.json(response.data);
     } catch (error) {
-        res.status(500).send("抓取失敗");
+        sendUpstreamError(res, error, '抓取留言');
     }
 });
 
@@ -79,7 +88,7 @@ app.get('/get-replies', async (req, res) => {
         }
         res.json(response.data);
     } catch (error) {
-        res.status(500).send("抓取回覆失敗");
+        sendUpstreamError(res, error, '抓取回覆');
     }
 });
 
