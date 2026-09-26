@@ -95,6 +95,8 @@
         .src-edit.flash { border-color: var(--primary); }
         .src-edit-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
         .src-edit-head .input { min-height: 40px; }
+        .tw-progress { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 0.8rem; color: var(--text-sub); }
+        .tw-progress .input { width: 64px; min-height: 34px; padding: 4px 8px; text-align: center; }
         .src-edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .src-edit-grid label { font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 2px; }
         .src-edit-grid .input { min-height: 38px; padding: 6px 10px; }
@@ -695,8 +697,11 @@
     let lookupResults = null; // [{ platform, review, status, match, options }]
     let lookupRunning = false;
 
-    const twInput = k => `<input class="input" id="twFrom-${k}" inputmode="numeric" placeholder="台版看到第幾話" aria-label="台版看到第幾話"
-        style="min-height:34px; padding:4px 8px; font-size:0.8rem; width:72px; flex-shrink:0; text-align:center;">`;
+    // 台版進度輸入：放在標題下方一整行「台版看到第 __ 話」，輸入框只放數字
+    const twInput = k => `
+        <label class="tw-progress">台版看到第
+            <input class="input" id="twFrom-${k}" inputmode="numeric" placeholder="—" aria-label="台版看到第幾話">
+        話</label>`;
 
     function renderAppLookup() {
         const box = document.getElementById('appLookup');
@@ -715,12 +720,11 @@
             if (x.status === 'pending') right = '<span class="detect">查詢中…</span>';
             else if (x.status === 'none') right = '<span class="detect">查不到</span>';
             else if (x.status === 'error') right = '<span class="detect" style="color: var(--danger);">查詢失敗</span>';
-            else if (x.status === 'match') right = `${x.platform === 'webtoon' ? twInput(lookupResults.indexOf(x)) : ''}<button class="btn btn-primary" style="min-height:34px; padding:0 12px; font-size:0.8rem;" onclick="addLookup(${lookupResults.indexOf(x)})">加入</button>`;
+            else if (x.status === 'match') right = `<button class="btn btn-primary" style="min-height:34px; padding:0 12px; font-size:0.8rem;" onclick="addLookup(${lookupResults.indexOf(x)})">加入</button>`;
             else right = `
                 <select class="input" id="lookupPick-${lookupResults.indexOf(x)}" style="min-height:34px; padding:4px 8px; font-size:0.8rem; max-width:150px;">
                     ${x.options.map((o, i) => `<option value="${i}">${escapeHtml(o.title)}${o.author ? `（${escapeHtml(o.author)}）` : ''}</option>`).join('')}
                 </select>
-                ${x.platform === 'webtoon' ? twInput(lookupResults.indexOf(x)) : ''}
                 <button class="btn btn-primary" style="min-height:34px; padding:0 12px; font-size:0.8rem;" onclick="addLookup(${lookupResults.indexOf(x)}, true)">加入</button>`;
             const sub = x.status === 'match'
                 ? `由標題查到：${escapeHtml(x.match.title)}${x.match.author ? ` · ${escapeHtml(x.match.author)}` : ''}`
@@ -732,6 +736,7 @@
                     <div style="flex:1; min-width:0;">
                         <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(name)}</div>
                         <div class="detect" style="margin:0;">${sub}</div>
+                        ${x.platform === 'webtoon' && ['match', 'choose'].includes(x.status) ? twInput(lookupResults.indexOf(x)) : ''}
                     </div>
                     ${right}
                 </div>`;
