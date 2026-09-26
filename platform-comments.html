@@ -163,7 +163,7 @@
                 <tr><th></th><th>Naver／Ridi（韓版）</th><th>台版 Webtoon</th></tr>
                 <tr><td>哪些作品</td><td>App 有勾這個平台</td><td>App 有「台版 Webtoon」標記</td></tr>
                 <tr><td>怎麼找作品</td><td>有網址直接用；沒有就用<b>韓文標題</b>查</td><td>用<b>台版譯名</b>（沒填用標題）查</td></tr>
-                <tr><td>從哪一話開始找</td><td>App 看到的話數往前 3 話</td><td>你填的台版進度的下一話</td></tr>
+                <tr><td>從哪一話開始找</td><td colspan="2">看到的話數往前 3 話（韓版用 App 進度，台版用你填的進度）。例如看到第 74 話，第一次更新會掃 72、73、74，之後每次往後找 3 話</td></tr>
             </table>
             <ul>
                 <li>標題要<b>完全一樣</b>才自動對上（忽略空格、[완전판]、括號）；好幾個結果時讓你選。</li>
@@ -904,10 +904,12 @@
     }
 
     // 韓版：App 記的就是看到的話數。台版：App 沒記台版進度，而且台版有付費搶先看（快讀），
-    // 最新話數常常比使用者看到的多，所以請使用者填「台版看到第幾話」，從下一話開始找
+    // 最新話數常常比使用者看到的多，所以請使用者填「台版看到第幾話」。
+    // 兩邊都從「看到的話數往前 N 話」開始，第一次更新就會掃到最近看的那幾話
     function lookupSource(x, series, twProgress) {
         const appEp = normalizeEpisode(x.review.episode)?.main || 0;
-        const lastScanned = x.platform === 'webtoon' ? twProgress : Math.max(0, appEp - tracker.newPerRun);
+        const seen = x.platform === 'webtoon' ? twProgress : appEp;
+        const lastScanned = Math.max(0, seen - tracker.newPerRun);
         return createSource({
             platform: x.platform, seriesId: series.seriesId,
             name: x.platform === 'webtoon' ? series.title : (cleanTitleBrackets(x.review.title) || series.title),
