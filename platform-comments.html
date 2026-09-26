@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260927-8">
+    <link rel="stylesheet" href="common.css?v=20260927-9">
     <style>
         body { padding-bottom: calc(80px + var(--safe-bottom)); } /* 留空間給底部分頁列 */
         body.no-scroll { overflow: hidden; }
@@ -336,7 +336,7 @@
     <div class="form-hint">平常更新只重新檢查 90 天內的留言；這個會檢查全部，比較久。</div>
 </div>
 
-<script src="common.js?v=20260927-8"></script>
+<script src="common.js?v=20260927-9"></script>
 <script>
     // API_BASE_URL 在 common.js
     const PLATFORM_INFO = {
@@ -1036,7 +1036,7 @@
                             ${fresh ? `<span class="new-badge">新回覆 ${fresh}</span>` : ''}
                             <span class="tag" style="--tag-color: ${info.color}">${info.label}</span>
                         </div>
-                        <div class="source-sub">已掃到第 ${s.lastScanned || 0} 話 · 留言 ${comments.length} 則${pending ? ` · ${pending} 話待檢查` : ''}</div>
+                        <div class="source-sub">已掃到第 ${s.lastScanned || 0} 話 · 留言 ${comments.length} 則${comments.length ? ` · 👍 ${comments.reduce((n, c) => n + (c.likes || 0), 0).toLocaleString()}` : ''}${pending ? ` · ${pending} 話待檢查` : ''}</div>
                     </summary>
                     <div class="source-body">
                         ${comments.length ? shown.map(c => commentHtml(c, s.platform, s)).join('') : '<div class="empty" style="padding:16px;">還沒找到你的留言</div>'}
