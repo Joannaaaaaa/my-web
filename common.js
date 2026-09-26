@@ -12,6 +12,7 @@ const PLATFORMS = Object.keys(PLATFORM_CONFIG);
 
 const STATUS_CONFIG = {
     "連載中": { cls: "status-ongoing", color: "var(--status-ongoing)" },
+    "完結": { cls: "status-finished", color: "var(--status-finished)" }, // 平台完結、還沒看完
     "已看完": { cls: "status-completed", color: "var(--status-completed)" },
     "休刊": { cls: "status-paused", color: "var(--status-paused)" },
     "棄坑": { cls: "status-dropped", color: "var(--status-dropped)" },
@@ -287,8 +288,8 @@ function countWeekdaysAfter(fromStr, toDate, day) {
 function latestEpisode(review, today = new Date()) {
     const l = review.latest;
     if (!l || !Number.isInteger(l.n)) return null;
-    // 連載中才每週自動 +1；平台已完結就不會再更新
-    const auto = (review.status || DEFAULT_STATUS) === DEFAULT_STATUS && review.updateDay && !review.platformFinished
+    // 連載中才每週自動 +1（休刊、完結不會）
+    const auto = (review.status || DEFAULT_STATUS) === DEFAULT_STATUS && review.updateDay
         ? countWeekdaysAfter(l.asOf, today, review.updateDay) : 0;
     return { n: l.n + auto, part: l.part || 'main' };
 }
@@ -507,6 +508,12 @@ function readJson(key, fallback) {
 function migrateReviews(list) {
     let changed = false;
     list.forEach(r => {
+        // 舊版用 platformFinished 標記「平台已完結」→ 改成「完結」狀態
+        if (r.platformFinished !== undefined) {
+            if (r.platformFinished && [DEFAULT_STATUS, '休刊'].includes(r.status || DEFAULT_STATUS)) r.status = '完結';
+            delete r.platformFinished;
+            changed = true;
+        }
         // 舊版只有確定日期 returnDate → 回歸時間
         if (r.returnDate) {
             if (!r.returnFrom) {
@@ -749,6 +756,9 @@ const Autofill = {
     },
 };
 
+// 平台顯示已完結時，這些狀態會自動改成「完結」（已看完、棄坑、想看是使用者自己的狀態，不動）
+const AUTO_FINISH_FROM = [DEFAULT_STATUS, '休刊'];
+
 // 平台上某一段（main／side／after）最新第幾話；舊版伺服器沒有 latestParts 時只有本篇
 function platformLatest(info, part) {
     return info.latestParts ? info.latestParts[part] || null : (part === 'main' ? info.latest || null : null);
@@ -771,7 +781,7 @@ function peopleDiffers(current, names) {
  * options.onInput：任何欄位改動時呼叫；options.teamOpen：創作團隊區塊預設展開。
  */
 function createReviewForm(container, options = {}) {
-    const state = { status: DEFAULT_STATUS, updateDay: '', platforms: [], rating: 0, coverId: '', twWebtoon: false, platformFinished: false };
+    const state = { status: DEFAULT_STATUS, updateDay: '', platforms: [], rating: 0, coverId: '', twWebtoon: false };
     let cleanSnapshot = '';
     // 回歸時間換算後就固定下來；文字沒改就沿用原本的區間，避免過一陣子再存時「春天」被改算成明年
     let returnOrig = { text: '', from: '', to: '' };
@@ -846,11 +856,8 @@ function createReviewForm(container, options = {}) {
         <div class="form-section">
             <label class="form-label">平台最新話數</label>
             <input class="input" type="text" inputmode="numeric" autocomplete="off" data-role="latest" placeholder="—" style="max-width: 160px; text-align: center;">
-            <div class="form-hint" data-role="latest-hint">填了就會顯示「待補 N 話」；連載中會在每週更新日自動 +1，休刊或延更再手動修正</div>
-            <div class="finished-toggle">
-                <button type="button" class="chip" data-toggle="platformFinished" style="--opt-color: var(--status-completed)">平台已完結</button>
-                <span class="form-hint">平台上已經完結、但你還沒看完時勾選：不會出現在本週頁，最新話數也不會再自動 +1</span>
-            </div>
+            <div class="form-hint" data-role="latest-hint">填了就會顯示「待補 N 話」；連載中會在每週更新日自動 +1（有平台網址的每天會自動從平台更新）</div>
+
         </div>
         <div class="form-section">
             <label class="form-label">發行平台</label>
@@ -925,7 +932,6 @@ function createReviewForm(container, options = {}) {
         $('[data-role="rating-number"]').textContent = state.rating ? state.rating : '';
         container.querySelectorAll('[data-link-row]').forEach(row => { row.hidden = !state.platforms.includes(row.dataset.linkRow); });
         $('[data-toggle="twWebtoon"]').classList.toggle('selected', state.twWebtoon);
-        $('[data-toggle="platformFinished"]').classList.toggle('selected', state.platformFinished);
         $('[data-role="tw-title"]').hidden = !state.twWebtoon;
         $('[data-role="day-section"]').style.display = state.status === DEFAULT_STATUS ? '' : 'none';
         $('[data-role="return-section"]').style.display = state.status === '休刊' ? '' : 'none';
@@ -1074,7 +1080,7 @@ function createReviewForm(container, options = {}) {
             }
         }
         if (!state.updateDay && info.day && !info.finished) { state.updateDay = info.day; filled.push(`更新日 ${DAY_MAP[info.day]}`); }
-        if (info.finished && !state.platformFinished) { state.platformFinished = true; filled.push('平台已完結'); }
+        if (info.finished && AUTO_FINISH_FROM.includes(state.status)) { filled.push(`狀態 ${state.status} → 完結`); state.status = '完結'; }
         changed();
         if (!state.coverId && info.cover) {
             afStatus('下載封面…');
@@ -1134,7 +1140,7 @@ function createReviewForm(container, options = {}) {
         }
         const toggle = e.target.closest('button[data-toggle]');
         if (toggle) {
-            const key = toggle.dataset.toggle; // twWebtoon、platformFinished
+            const key = toggle.dataset.toggle; // twWebtoon
             state[key] = !state[key];
             changed();
             return;
@@ -1191,7 +1197,6 @@ function createReviewForm(container, options = {}) {
             coverId: state.coverId,
             twWebtoon: state.twWebtoon,
             twTitle: state.twWebtoon ? data.twTitle.trim() : '',
-            platformFinished: state.platformFinished,
         };
     }
 
@@ -1208,7 +1213,6 @@ function createReviewForm(container, options = {}) {
         state.rating = ratingValue(data.rating);
         state.coverId = data.coverId || '';
         state.twWebtoon = !!data.twWebtoon;
-        state.platformFinished = !!data.platformFinished;
         afReset();
         refreshCover();
         refreshChips();

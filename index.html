@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-14">
+    <link rel="stylesheet" href="common.css?v=20260926-16">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -156,7 +156,6 @@
         }
         .detail-title .ep-badge { font-size: 0.95rem; vertical-align: 0.2em; }
         .backlog-badge { background: var(--backlog-bg); color: var(--backlog-text); }
-        .done-badge { background: color-mix(in srgb, var(--status-completed) 18%, transparent); color: var(--status-completed); }
         /* 本週清單標題可換行，話數標籤接在標題後面 */
         .title-line { font-weight: bold; line-height: 1.4; word-break: break-word; }
         .title-line .day-item-title { display: inline; white-space: normal; }
@@ -296,6 +295,11 @@
         .sheet.open { display: block; animation: slideUp 0.2s ease-out; }
         .sheet-handle { width: 40px; height: 4px; border-radius: 2px; background: var(--border-strong); margin: 4px auto 12px; }
         .sheet h3 { margin: 0 0 12px; font-size: 1rem; }
+        .menu-item-2line { padding-top: 8px; padding-bottom: 8px; }
+        .menu-sub { display: block; margin-top: 2px; font-size: 0.78rem; color: var(--text-sub); line-height: 1.4; }
+        .menu-sub.bad { color: var(--flag-text); }
+        .sync-pill { margin-left: 10px; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: normal; vertical-align: middle;
+            background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--primary); }
         .menu-item {
             display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 0 8px;
             border: none; background: none; color: var(--text); font-size: 1rem; text-align: left; cursor: pointer;
@@ -404,7 +408,7 @@
 <body>
 
 <header class="app-header">
-    <h1>웹툰<span class="count" id="totalCount"></span></h1>
+    <h1>웹툰<span class="count" id="totalCount"></span><span class="sync-pill" id="autoSyncPill" hidden>🔄 更新中…</span></h1>
     <button class="icon-btn" onclick="Sheets.open('menuSheet')" aria-label="更多功能">⋯</button>
 </header>
 
@@ -499,7 +503,9 @@
     <div class="sheet-handle"></div>
     <button class="menu-item" onclick="downloadBackup()">💾 下載備份</button>
     <button class="menu-item" onclick="openCleanup()">🧹 整理舊資料</button>
-    <button class="menu-item" onclick="openSync()">🔄 更新平台資料</button>
+    <button class="menu-item menu-item-2line" onclick="openSync()">
+        <span>🔄 更新平台資料<small class="menu-sub" id="autoSyncStatus"></small></span>
+    </button>
     <button class="menu-item" id="themeMenuItem" onclick="cycleTheme()">🌓 外觀：跟隨手機</button>
     <button class="menu-item" onclick="document.getElementById('filePicker').click()">📤 匯入備份</button>
     <a class="menu-item" href="platform-comments.html">💬 查詢平台留言</a>
@@ -631,7 +637,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260926-14"></script>
+<script src="common.js?v=20260926-16"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added', view: 'list' }, Store.loadUi());
@@ -794,7 +800,7 @@
 
     function statusBadgeHtml(r) {
         const status = r.status || DEFAULT_STATUS;
-        let day = status === DEFAULT_STATUS && DAY_MAP[r.updateDay] && !r.platformFinished ? ` · ${DAY_MAP[r.updateDay]}` : '';
+        let day = status === DEFAULT_STATUS && DAY_MAP[r.updateDay] ? ` · ${DAY_MAP[r.updateDay]}` : '';
         if (status === '休刊') {
             const st = returnStatus(r);
             day = {
@@ -859,14 +865,11 @@
     }
 
     // 封面牆的一格：封面（左上狀態、右上待補）＋標題＋話數
-    const STATUS_SHORT = { '連載中': '連載', '已看完': '看完', '休刊': '休刊', '棄坑': '棄坑', '想看': '想看' };
+    const STATUS_SHORT = { '連載中': '連載', '完結': '完結', '已看完': '看完', '休刊': '休刊', '棄坑': '棄坑', '想看': '想看' };
     function wallTileHtml(r, i) {
         const status = STATUS_CONFIG[r.status] ? r.status : DEFAULT_STATUS;
         const backlog = backlogOf(r);
-        const sub = [
-            r.platformFinished && status !== '已看完' ? '完結' : status === DEFAULT_STATUS && DAY_MAP[r.updateDay] ? DAY_MAP[r.updateDay] : '',
-            episodeLabel(r.episode),
-        ].filter(Boolean).join(' · ');
+        const sub = [status === DEFAULT_STATUS && DAY_MAP[r.updateDay] ? DAY_MAP[r.updateDay] : '', episodeLabel(r.episode)].filter(Boolean).join(' · ');
         return `
             <article class="wall-tile" role="button" tabindex="0" onclick="openDetail(${i})" onkeydown="if (event.key === 'Enter') openDetail(${i})">
                 <div class="wall-cover">
@@ -893,7 +896,7 @@
 
     function comicsOn(day) {
         return allReviews.map((r, i) => ({ r, i }))
-            .filter(({ r }) => (r.status || DEFAULT_STATUS) === DEFAULT_STATUS && r.updateDay === day && !r.platformFinished);
+            .filter(({ r }) => (r.status || DEFAULT_STATUS) === DEFAULT_STATUS && r.updateDay === day);
     }
 
     function renderWeekly() {
@@ -1058,8 +1061,7 @@
         const label = episodeLabel(r.episode);
         const backlog = backlogOf(r);
         return (label ? `<span class="ep-badge">${label}</span>` : '')
-            + (backlog ? `<span class="ep-badge backlog-badge">待補 ${backlog}</span>` : '')
-            + (r.platformFinished && (r.status || DEFAULT_STATUS) !== '已看完' ? '<span class="ep-badge done-badge">完結</span>' : '');
+            + (backlog ? `<span class="ep-badge backlog-badge">待補 ${backlog}</span>` : '');
     }
 
     function progressControlsHtml(r, i) {
@@ -1153,7 +1155,7 @@
 
     // ---------- 統計 ----------
     // 堆疊順序讓相鄰色塊在色盲下也能區分（紫色的休刊不緊鄰藍色的已看完、粉紅的想看不緊鄰綠色的連載中）
-    const CHART_STATUS_ORDER = ['連載中', '已看完', '想看', '棄坑', '休刊'];
+    const CHART_STATUS_ORDER = ['連載中', '完結', '已看完', '想看', '棄坑', '休刊'];
     let ratingPlatform = 'all';
 
     const statusOf = r => STATUS_CONFIG[r.status] ? r.status : DEFAULT_STATUS;
@@ -1627,7 +1629,7 @@
     // ---------- 更新平台資料 ----------
     // 有 Naver／Ridi／Naver Series 的作品：有網址直接查，沒網址用韓文標題找「完全同名且只有一部」的作品
     // 只填空白欄位；最新話數只在看本篇、狀態是連載中／休刊／想看時更新。查完先列出變動，勾選後才套用
-    const SYNC_LATEST_STATUSES = ['連載中', '休刊', '想看'];
+    const SYNC_LATEST_STATUSES = ['連載中', '休刊', '想看', '完結'];
     const SYNC_CONCURRENCY = 3;
     let syncPlan = [];
     let syncFailed = [];
@@ -1709,9 +1711,9 @@
             const label = `最新話數${part.key === 'main' ? '' : `（${part.label}）`}`;
             rows.push([label, oldLatest && oldLatest.part === part.key ? `<span class="old">${oldLatest.n}</span> → ${newLatest}` : String(newLatest), true]);
         }
-        if (info.finished && !r.platformFinished) {
-            next.platformFinished = true;
-            rows.push(['平台狀態', '已完結（不會再自動 +1、不出現在本週頁）']);
+        if (info.finished && AUTO_FINISH_FROM.includes(status)) {
+            Object.assign(next, { status: '完結', returnText: '', returnFrom: '', returnTo: '' });
+            rows.push(['狀態', `<span class="old">${escapeHtml(status)}</span> → 完結（平台已完結）`, true]);
         }
         if (status === DEFAULT_STATUS && !r.updateDay && info.day && !info.finished) {
             next.updateDay = info.day;
@@ -2102,17 +2104,63 @@
     // 每天第一次打開：有 Naver／Ridi／Series／Bomtoon 網址、連載中／休刊／想看、平台還沒完結的作品，
     // 在背景查最新話數（依正在看的那一段）與是否完結。只改這兩項；正在編輯的作品跳過；
     // 有開著的視窗時等全部關掉才重畫。查不到（伺服器沒開、休眠太久）就安靜略過，下次打開再試。
-    const AUTO_SYNC_KEY = 'my_review_auto_sync'; // 最後一次成功的日期；不算在備份資料裡
+    // localStorage：{ doneDate: 最後一次成功的日期, last: { at, checked, ok, updated, finished, error } }；不在備份裡
+    const AUTO_SYNC_KEY = 'my_review_auto_sync';
+    const AUTO_SYNC_STATUSES = ['連載中', '休刊', '想看']; // 完結的不用每天查
     const AUTO_SYNC_ENABLED = location.protocol !== 'file:' || new URLSearchParams(location.search).has('autosync');
+    let autoSyncRunning = false;
+
+    function loadAutoSync() {
+        try {
+            const raw = localStorage.getItem(AUTO_SYNC_KEY);
+            if (!raw) return {};
+            return raw.startsWith('{') ? JSON.parse(raw) : { doneDate: raw }; // 舊版只存日期字串
+        } catch { return {}; }
+    }
+    function saveAutoSync(state) {
+        try { localStorage.setItem(AUTO_SYNC_KEY, JSON.stringify(state)); } catch {}
+    }
+
+    // 標題旁的「更新中」與選單裡「更新平台資料」下面的小字
+    function renderAutoSyncStatus() {
+        document.getElementById('autoSyncPill').hidden = !autoSyncRunning;
+        const el = document.getElementById('autoSyncStatus');
+        const { last } = loadAutoSync();
+        el.classList.remove('bad');
+        if (autoSyncRunning) { el.textContent = '背景自動檢查中…'; return; }
+        if (!AUTO_SYNC_ENABLED) { el.textContent = ''; return; }
+        if (!last) { el.textContent = '每天第一次打開會自動檢查最新話數'; return; }
+        const at = new Date(last.at);
+        const pad = n => String(n).padStart(2, '0');
+        const day = toDateStr(at) === toDateStr(new Date()) ? '今天' : `${at.getMonth() + 1}/${at.getDate()}`;
+        const when = `${day} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
+        if (last.checked === 0) { el.textContent = `${when} 沒有可以自動檢查的作品（要有平台網址）`; return; }
+        if (!last.ok) {
+            el.textContent = `${when} 自動檢查失敗：${last.error || '連不上伺服器'}，下次打開再試`;
+            el.classList.add('bad');
+            return;
+        }
+        const changes = [last.updated && `${last.updated} 部最新話數有更新`, last.finished && `${last.finished} 部改成完結`].filter(Boolean);
+        const failed = last.checked - last.ok;
+        el.textContent = `${when} 自動檢查 ${last.checked} 部，${changes.length ? changes.join('、') : '都是最新的'}${failed ? `（${failed} 部查不到）` : ''}`;
+    }
 
     async function autoSyncLatest() {
         const today = toDateStr(new Date());
-        try { if (localStorage.getItem(AUTO_SYNC_KEY) === today) return; } catch { return; }
-        const targets = allReviews.filter(r => SYNC_LATEST_STATUSES.includes(r.status || DEFAULT_STATUS) && !r.platformFinished
+        const state = loadAutoSync();
+        if (state.doneDate === today) return;
+        const targets = allReviews.filter(r => AUTO_SYNC_STATUSES.includes(r.status || DEFAULT_STATUS)
             && (r.platforms || []).some(p => AUTOFILL_PLATFORMS[p] && workIdFromLink(p, (r.links || {})[p])));
-        if (!targets.length) return;
+        if (!targets.length) {
+            saveAutoSync({ doneDate: today, last: { at: Date.now(), checked: 0, ok: 0 } });
+            renderAutoSyncStatus();
+            return;
+        }
+        autoSyncRunning = true;
+        renderAutoSyncStatus();
         const found = []; // [{ r, info }]
         let ok = 0;
+        let error = '';
         const queue = [...targets];
         await Promise.all(Array.from({ length: SYNC_CONCURRENCY }, async () => {
             while (queue.length) {
@@ -2121,11 +2169,18 @@
                 try {
                     found.push({ r, info: await Autofill.info(platform, workIdFromLink(platform, r.links[platform])) });
                     ok++;
-                } catch { /* 單部失敗就略過 */ }
+                } catch (err) {
+                    error = err.message === 'Failed to fetch' ? '連不上伺服器' : err.message; // 單部失敗就略過
+                }
             }
         }));
-        if (!ok) return;
-        try { localStorage.setItem(AUTO_SYNC_KEY, today); } catch {}
+        autoSyncRunning = false;
+        const last = { at: Date.now(), checked: targets.length, ok, updated: 0, finished: 0, error };
+        if (!ok) {
+            saveAutoSync({ ...state, last });
+            renderAutoSyncStatus();
+            return;
+        }
 
         // 套用時重新讀目前的資料：查詢期間被編輯（物件換掉）或正在編輯的作品都跳過
         let updated = 0;
@@ -2141,14 +2196,19 @@
                 next.latest = { n, part: part.key, asOf: today };
                 updated++;
             }
-            if (info.finished) { next.platformFinished = true; finished++; }
+            if (info.finished && AUTO_FINISH_FROM.includes(r.status || DEFAULT_STATUS)) {
+                Object.assign(next, { status: '完結', returnText: '', returnFrom: '', returnTo: '' });
+                finished++;
+            }
             if (Object.keys(next).length) allReviews[index] = { ...r, ...next };
         }
+        saveAutoSync({ doneDate: today, last: { ...last, updated, finished } });
+        renderAutoSyncStatus();
         if (!updated && !finished) return;
         Store.saveReviews(allReviews, { silent: true });
         const refresh = () => {
             renderAll();
-            showToast([updated && `已自動更新 ${updated} 部的最新話數`, finished && `${finished} 部平台已完結`].filter(Boolean).join('，'));
+            showToast([updated && `已自動更新 ${updated} 部的最新話數`, finished && `${finished} 部改成完結`].filter(Boolean).join('，'));
         };
         if (Sheets.stack.length) Sheets.afterAllClosed.push(refresh);
         else refresh();
@@ -2159,6 +2219,7 @@
     renderAll();
     switchTab(ui.tab);
     loadCovers({ cleanup: true });
+    renderAutoSyncStatus();
     if (AUTO_SYNC_ENABLED) autoSyncLatest();
 </script>
 </body>
