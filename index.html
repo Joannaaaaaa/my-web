@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-13">
+    <link rel="stylesheet" href="common.css?v=20260926-14">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -156,6 +156,7 @@
         }
         .detail-title .ep-badge { font-size: 0.95rem; vertical-align: 0.2em; }
         .backlog-badge { background: var(--backlog-bg); color: var(--backlog-text); }
+        .done-badge { background: color-mix(in srgb, var(--status-completed) 18%, transparent); color: var(--status-completed); }
         /* 本週清單標題可換行，話數標籤接在標題後面 */
         .title-line { font-weight: bold; line-height: 1.4; word-break: break-word; }
         .title-line .day-item-title { display: inline; white-space: normal; }
@@ -630,7 +631,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260926-13"></script>
+<script src="common.js?v=20260926-14"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added', view: 'list' }, Store.loadUi());
@@ -662,7 +663,10 @@
             }
             this.stack.pop();
             this.show(id, false);
+            // 全部關掉後才執行（背景更新完，等使用者看完／編輯完再重畫）
+            if (!this.stack.length && this.afterAllClosed.length) this.afterAllClosed.splice(0).forEach(fn => fn());
         },
+        afterAllClosed: [],
         show(id, visible) {
             const el = document.getElementById(id);
             el.classList.toggle('open', visible);
@@ -711,12 +715,17 @@
         document.getElementById('sortSelect').value = ui.sort;
     }
 
+    // 「有得看」：平台最新話數比看到的多（待補 > 0），棄坑的不算
+    const READABLE = 'readable';
+    const isReadable = r => (r.status || DEFAULT_STATUS) !== '棄坑' && backlogOf(r) > 0;
+
     function renderStatusChips() {
-        const counts = { all: allReviews.length };
+        const counts = { all: allReviews.length, [READABLE]: allReviews.filter(isReadable).length };
         STATUSES.forEach(s => { counts[s] = allReviews.filter(r => (r.status || DEFAULT_STATUS) === s).length; });
-        document.getElementById('statusChips').innerHTML = ['all', ...STATUSES].map(s => `
+        const label = { all: '全部', [READABLE]: '📖 有得看' };
+        document.getElementById('statusChips').innerHTML = ['all', READABLE, ...STATUSES].map(s => `
             <button class="chip ${ui.status === s ? 'selected' : ''}" onclick="setStatusFilter('${s}')">
-                ${s === 'all' ? '全部' : s} ${counts[s]}
+                ${label[s] || s} ${counts[s]}
             </button>`).join('');
     }
 
@@ -757,7 +766,7 @@
         const query = document.getElementById('searchInput').value.toLowerCase().trim();
         const indexes = allReviews.map((_, i) => i).filter(i => {
             const r = allReviews[i];
-            if (ui.status !== 'all' && (r.status || DEFAULT_STATUS) !== ui.status) return false;
+            if (ui.status === READABLE ? !isReadable(r) : ui.status !== 'all' && (r.status || DEFAULT_STATUS) !== ui.status) return false;
             if (ui.platform !== 'all' && !(r.platforms || []).includes(ui.platform)) return false;
             if (ui.studio !== 'all' && !splitNames(r.studio).includes(ui.studio)) return false;
             if (query && !SEARCH_FIELDS.some(f => String(r[f] || '').toLowerCase().includes(query))
@@ -785,7 +794,7 @@
 
     function statusBadgeHtml(r) {
         const status = r.status || DEFAULT_STATUS;
-        let day = status === DEFAULT_STATUS && DAY_MAP[r.updateDay] ? ` · ${DAY_MAP[r.updateDay]}` : '';
+        let day = status === DEFAULT_STATUS && DAY_MAP[r.updateDay] && !r.platformFinished ? ` · ${DAY_MAP[r.updateDay]}` : '';
         if (status === '休刊') {
             const st = returnStatus(r);
             day = {
@@ -854,7 +863,10 @@
     function wallTileHtml(r, i) {
         const status = STATUS_CONFIG[r.status] ? r.status : DEFAULT_STATUS;
         const backlog = backlogOf(r);
-        const sub = [status === DEFAULT_STATUS && DAY_MAP[r.updateDay] ? DAY_MAP[r.updateDay] : '', episodeLabel(r.episode)].filter(Boolean).join(' · ');
+        const sub = [
+            r.platformFinished && status !== '已看完' ? '完結' : status === DEFAULT_STATUS && DAY_MAP[r.updateDay] ? DAY_MAP[r.updateDay] : '',
+            episodeLabel(r.episode),
+        ].filter(Boolean).join(' · ');
         return `
             <article class="wall-tile" role="button" tabindex="0" onclick="openDetail(${i})" onkeydown="if (event.key === 'Enter') openDetail(${i})">
                 <div class="wall-cover">
@@ -881,7 +893,7 @@
 
     function comicsOn(day) {
         return allReviews.map((r, i) => ({ r, i }))
-            .filter(({ r }) => (r.status || DEFAULT_STATUS) === DEFAULT_STATUS && r.updateDay === day);
+            .filter(({ r }) => (r.status || DEFAULT_STATUS) === DEFAULT_STATUS && r.updateDay === day && !r.platformFinished);
     }
 
     function renderWeekly() {
@@ -1046,7 +1058,8 @@
         const label = episodeLabel(r.episode);
         const backlog = backlogOf(r);
         return (label ? `<span class="ep-badge">${label}</span>` : '')
-            + (backlog ? `<span class="ep-badge backlog-badge">待補 ${backlog}</span>` : '');
+            + (backlog ? `<span class="ep-badge backlog-badge">待補 ${backlog}</span>` : '')
+            + (r.platformFinished && (r.status || DEFAULT_STATUS) !== '已看完' ? '<span class="ep-badge done-badge">完結</span>' : '');
     }
 
     function progressControlsHtml(r, i) {
@@ -1696,13 +1709,16 @@
             const label = `最新話數${part.key === 'main' ? '' : `（${part.label}）`}`;
             rows.push([label, oldLatest && oldLatest.part === part.key ? `<span class="old">${oldLatest.n}</span> → ${newLatest}` : String(newLatest), true]);
         }
+        if (info.finished && !r.platformFinished) {
+            next.platformFinished = true;
+            rows.push(['平台狀態', '已完結（不會再自動 +1、不出現在本週頁）']);
+        }
         if (status === DEFAULT_STATUS && !r.updateDay && info.day && !info.finished) {
             next.updateDay = info.day;
             rows.push(['更新日', DAY_MAP[info.day]]);
         }
         const coverUrl = !r.coverId && info.cover ? info.cover : '';
         if (coverUrl) rows.push(['封面', '下載平台封面']);
-        if (info.finished && (status === DEFAULT_STATUS || status === '休刊')) flags.push('平台顯示已完結，要不要改狀態？');
         return { index, platform, next, rows, flags, coverUrl, diffs };
     }
 
@@ -2082,11 +2098,68 @@
         if (currentEditIndex >= 0 && Sheets.stack.includes('detailSheet') && !isEditMode) renderDetailView(currentEditIndex);
     }
 
+    // ---------- 背景自動更新最新話數 ----------
+    // 每天第一次打開：有 Naver／Ridi／Series／Bomtoon 網址、連載中／休刊／想看、平台還沒完結的作品，
+    // 在背景查最新話數（依正在看的那一段）與是否完結。只改這兩項；正在編輯的作品跳過；
+    // 有開著的視窗時等全部關掉才重畫。查不到（伺服器沒開、休眠太久）就安靜略過，下次打開再試。
+    const AUTO_SYNC_KEY = 'my_review_auto_sync'; // 最後一次成功的日期；不算在備份資料裡
+    const AUTO_SYNC_ENABLED = location.protocol !== 'file:' || new URLSearchParams(location.search).has('autosync');
+
+    async function autoSyncLatest() {
+        const today = toDateStr(new Date());
+        try { if (localStorage.getItem(AUTO_SYNC_KEY) === today) return; } catch { return; }
+        const targets = allReviews.filter(r => SYNC_LATEST_STATUSES.includes(r.status || DEFAULT_STATUS) && !r.platformFinished
+            && (r.platforms || []).some(p => AUTOFILL_PLATFORMS[p] && workIdFromLink(p, (r.links || {})[p])));
+        if (!targets.length) return;
+        const found = []; // [{ r, info }]
+        let ok = 0;
+        const queue = [...targets];
+        await Promise.all(Array.from({ length: SYNC_CONCURRENCY }, async () => {
+            while (queue.length) {
+                const r = queue.shift();
+                const platform = r.platforms.find(p => AUTOFILL_PLATFORMS[p] && workIdFromLink(p, r.links[p]));
+                try {
+                    found.push({ r, info: await Autofill.info(platform, workIdFromLink(platform, r.links[platform])) });
+                    ok++;
+                } catch { /* 單部失敗就略過 */ }
+            }
+        }));
+        if (!ok) return;
+        try { localStorage.setItem(AUTO_SYNC_KEY, today); } catch {}
+
+        // 套用時重新讀目前的資料：查詢期間被編輯（物件換掉）或正在編輯的作品都跳過
+        let updated = 0;
+        let finished = 0;
+        for (const { r, info } of found) {
+            const index = allReviews.indexOf(r);
+            if (index < 0 || (isEditMode && index === currentEditIndex)) continue;
+            const part = currentEpisodePart(r.episode);
+            const n = platformLatest(info, part.key);
+            const old = latestEpisode(r);
+            const next = {};
+            if (n && (!old || old.part !== part.key || old.n !== n)) {
+                next.latest = { n, part: part.key, asOf: today };
+                updated++;
+            }
+            if (info.finished) { next.platformFinished = true; finished++; }
+            if (Object.keys(next).length) allReviews[index] = { ...r, ...next };
+        }
+        if (!updated && !finished) return;
+        Store.saveReviews(allReviews, { silent: true });
+        const refresh = () => {
+            renderAll();
+            showToast([updated && `已自動更新 ${updated} 部的最新話數`, finished && `${finished} 部平台已完結`].filter(Boolean).join('，'));
+        };
+        if (Sheets.stack.length) Sheets.afterAllClosed.push(refresh);
+        else refresh();
+    }
+
     updateThemeMenu();
     memoArea.value = Store.loadMemo();
     renderAll();
     switchTab(ui.tab);
     loadCovers({ cleanup: true });
+    if (AUTO_SYNC_ENABLED) autoSyncLatest();
 </script>
 </body>
 </html>

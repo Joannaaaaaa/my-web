@@ -271,3 +271,8 @@ a.tag-link:active { background: var(--raised); }
 .autofill-diff-text { flex: 1; min-width: 0; display: grid; gap: 2px; font-size: 0.85rem; color: var(--text-sub); overflow-wrap: anywhere; }
 .autofill-diff-label { font-weight: bold; color: var(--text); }
 .autofill-diff-btn { flex-shrink: 0; min-height: 36px; padding: 0 12px; font-size: 0.85rem; }
+
+/* 平台已完結 */
+.finished-toggle { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.finished-toggle .chip { flex-shrink: 0; }
+.finished-toggle .form-hint { margin: 0; }

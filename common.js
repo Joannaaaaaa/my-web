@@ -287,7 +287,9 @@ function countWeekdaysAfter(fromStr, toDate, day) {
 function latestEpisode(review, today = new Date()) {
     const l = review.latest;
     if (!l || !Number.isInteger(l.n)) return null;
-    const auto = (review.status || DEFAULT_STATUS) === DEFAULT_STATUS && review.updateDay ? countWeekdaysAfter(l.asOf, today, review.updateDay) : 0;
+    // 連載中才每週自動 +1；平台已完結就不會再更新
+    const auto = (review.status || DEFAULT_STATUS) === DEFAULT_STATUS && review.updateDay && !review.platformFinished
+        ? countWeekdaysAfter(l.asOf, today, review.updateDay) : 0;
     return { n: l.n + auto, part: l.part || 'main' };
 }
 
@@ -553,7 +555,11 @@ const Store = {
         if (migrateReviews(list)) this.saveReviews(list);
         return list;
     },
-    saveReviews(list) { localStorage.setItem(STORAGE_KEYS.reviews, JSON.stringify(list)); markDataChanged(); },
+    // silent：背景自動更新最新話數這類可以從平台重新取得的資料，不算「有更新要備份」
+    saveReviews(list, { silent = false } = {}) {
+        localStorage.setItem(STORAGE_KEYS.reviews, JSON.stringify(list));
+        if (!silent) markDataChanged();
+    },
     loadMemo() { return localStorage.getItem(STORAGE_KEYS.memo) || ''; },
     saveMemo(text) { localStorage.setItem(STORAGE_KEYS.memo, text); markDataChanged(); },
     loadDraft() { return readJson(STORAGE_KEYS.draft, null); },
@@ -765,7 +771,7 @@ function peopleDiffers(current, names) {
  * options.onInput：任何欄位改動時呼叫；options.teamOpen：創作團隊區塊預設展開。
  */
 function createReviewForm(container, options = {}) {
-    const state = { status: DEFAULT_STATUS, updateDay: '', platforms: [], rating: 0, coverId: '', twWebtoon: false };
+    const state = { status: DEFAULT_STATUS, updateDay: '', platforms: [], rating: 0, coverId: '', twWebtoon: false, platformFinished: false };
     let cleanSnapshot = '';
     // 回歸時間換算後就固定下來；文字沒改就沿用原本的區間，避免過一陣子再存時「春天」被改算成明年
     let returnOrig = { text: '', from: '', to: '' };
@@ -841,6 +847,10 @@ function createReviewForm(container, options = {}) {
             <label class="form-label">平台最新話數</label>
             <input class="input" type="text" inputmode="numeric" autocomplete="off" data-role="latest" placeholder="—" style="max-width: 160px; text-align: center;">
             <div class="form-hint" data-role="latest-hint">填了就會顯示「待補 N 話」；連載中會在每週更新日自動 +1，休刊或延更再手動修正</div>
+            <div class="finished-toggle">
+                <button type="button" class="chip" data-toggle="platformFinished" style="--opt-color: var(--status-completed)">平台已完結</button>
+                <span class="form-hint">平台上已經完結、但你還沒看完時勾選：不會出現在本週頁，最新話數也不會再自動 +1</span>
+            </div>
         </div>
         <div class="form-section">
             <label class="form-label">發行平台</label>
@@ -915,6 +925,7 @@ function createReviewForm(container, options = {}) {
         $('[data-role="rating-number"]').textContent = state.rating ? state.rating : '';
         container.querySelectorAll('[data-link-row]').forEach(row => { row.hidden = !state.platforms.includes(row.dataset.linkRow); });
         $('[data-toggle="twWebtoon"]').classList.toggle('selected', state.twWebtoon);
+        $('[data-toggle="platformFinished"]').classList.toggle('selected', state.platformFinished);
         $('[data-role="tw-title"]').hidden = !state.twWebtoon;
         $('[data-role="day-section"]').style.display = state.status === DEFAULT_STATUS ? '' : 'none';
         $('[data-role="return-section"]').style.display = state.status === '休刊' ? '' : 'none';
@@ -1063,7 +1074,7 @@ function createReviewForm(container, options = {}) {
             }
         }
         if (!state.updateDay && info.day && !info.finished) { state.updateDay = info.day; filled.push(`更新日 ${DAY_MAP[info.day]}`); }
-        if (info.finished) notes.push('平台顯示已完結');
+        if (info.finished && !state.platformFinished) { state.platformFinished = true; filled.push('平台已完結'); }
         changed();
         if (!state.coverId && info.cover) {
             afStatus('下載封面…');
@@ -1121,9 +1132,10 @@ function createReviewForm(container, options = {}) {
             container.querySelector('.team-details').open = true;
             return changed();
         }
-        const toggle = e.target.closest('button[data-toggle="twWebtoon"]');
+        const toggle = e.target.closest('button[data-toggle]');
         if (toggle) {
-            state.twWebtoon = !state.twWebtoon;
+            const key = toggle.dataset.toggle; // twWebtoon、platformFinished
+            state[key] = !state[key];
             changed();
             return;
         }
@@ -1179,6 +1191,7 @@ function createReviewForm(container, options = {}) {
             coverId: state.coverId,
             twWebtoon: state.twWebtoon,
             twTitle: state.twWebtoon ? data.twTitle.trim() : '',
+            platformFinished: state.platformFinished,
         };
     }
 
@@ -1195,6 +1208,7 @@ function createReviewForm(container, options = {}) {
         state.rating = ratingValue(data.rating);
         state.coverId = data.coverId || '';
         state.twWebtoon = !!data.twWebtoon;
+        state.platformFinished = !!data.platformFinished;
         afReset();
         refreshCover();
         refreshChips();
