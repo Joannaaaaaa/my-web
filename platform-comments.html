@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-25">
+    <link rel="stylesheet" href="common.css?v=20260926-26">
     <style>
         body { padding-bottom: calc(80px + var(--safe-bottom)); } /* 留空間給底部分頁列 */
         body.no-scroll { overflow: hidden; }
@@ -87,6 +87,14 @@
         .sheet-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
         .sheet-top h3 { margin: 0; font-size: 1rem; }
         .sheet h4 { font-size: 0.88rem; color: var(--text-sub); margin: 18px 0 8px; }
+        .account-group { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+        .account-group h5 { margin: 0 0 6px; font-size: 0.85rem; }
+        .account-row { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; border-top: 1px solid var(--border); cursor: pointer; }
+        .account-row:first-of-type { border-top: none; }
+        .account-row input { width: 20px; height: 20px; margin-top: 2px; flex-shrink: 0; accent-color: var(--primary); }
+        .account-row .who { font-weight: bold; }
+        .account-row .sample { font-size: 0.78rem; color: var(--text-muted); overflow-wrap: anywhere; }
+        .account-warn { font-size: 0.82rem; color: var(--flag-text); background: var(--raised); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; cursor: pointer; }
         .user-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; align-items: center; }
         .user-grid label { font-size: 0.85rem; color: var(--text-sub); }
         .detect { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; min-height: 1.2em; }
@@ -132,6 +140,7 @@
     <div class="progress" id="progress" hidden><span id="progressText"></span><button class="btn" onclick="cancelRun()">停止</button></div>
     <div class="last-run" id="lastRun"></div>
     <div class="run-errors" id="runErrors" hidden></div>
+    <div class="account-warn" id="accountWarn" hidden></div>
     <div id="sources"></div>
 </main>
 
@@ -220,8 +229,9 @@
         <div class="help-body">
             <ul>
                 <li>作者名稱<b>開頭</b>符合 ⚙ 裡的帳號名稱（Ridi 會遮成 abc***** 這樣）。</li>
-                <li>找到一次之後會記住你的<b>帳號 ID</b>，之後用 ID 比對，比較不會認錯。</li>
-                <li>換暱稱後找不到留言，到 ⚙ 改帳號名稱就好。</li>
+                <li>找到後會記住那則留言的<b>帳號編號</b>，之後同一個編號的留言也算你的。</li>
+                <li><b>名字很短時會認錯</b>：Naver 常只顯示前 3 個字（例如 joa），別人開頭一樣也會被當成你。掃過之後到 ⚙「確認是哪個帳號」勾你自己的，沒勾的留言會被移除，<b>之後只認勾選的帳號編號</b>、不再看名字。頁面上方出現「來自好幾個帳號」的提醒時，就是該確認了。</li>
+                <li>換暱稱後找不到留言，到 ⚙ 改帳號名稱就好；確認過帳號的話，換暱稱也照樣找得到（帳號編號不變）。</li>
             </ul>
         </div>
     </details>
@@ -261,7 +271,10 @@
         <label for="userNaver">Naver</label><input class="input" id="userNaver" data-user="naver" placeholder="例如 abc">
         <label for="userRidi">Ridi</label><input class="input" id="userRidi" data-user="ridi" placeholder="例如 abc">
     </div>
-    <div class="form-hint">平台會遮住部分名字，填開頭幾個字就好。找到你的留言後會記住帳號，之後比對更準確。</div>
+    <div class="form-hint">平台會遮住部分名字，填開頭幾個字就好。名字很短時（例如 Naver 常只顯示 3 個字）可能會混到別人的留言，掃過之後到下面「確認是哪個帳號」勾選你自己的。</div>
+
+    <h4>確認是哪個帳號</h4>
+    <div id="accountConfirm"></div>
 
     <h4>自動找新留言</h4>
     <div class="user-grid">
@@ -283,7 +296,7 @@
     <div class="form-hint">平常更新只重新檢查 90 天內的留言；這個會檢查全部，比較久。</div>
 </div>
 
-<script src="common.js?v=20260926-25"></script>
+<script src="common.js?v=20260926-26"></script>
 <script>
     // API_BASE_URL 在 common.js
     const PLATFORM_INFO = {
@@ -306,6 +319,8 @@
         return {
             usernames: { webtoon: '', naver: '', ridi: '', ...t.usernames },
             userIds: { webtoon: [], naver: [], ridi: [], ...t.userIds },
+            // 使用者確認過「這是我」的帳號編號；有確認過就只認這些，不再用名字比對
+            confirmedIds: { webtoon: [], naver: [], ridi: [], ...t.confirmedIds },
             newPerRun: t.newPerRun || 3,
             sources: t.sources || [],
             lastRun: t.lastRun || null,
@@ -379,6 +394,8 @@
     }
 
     function isMine(platform, c) {
+        const confirmed = tracker.confirmedIds[platform];
+        if (confirmed.length) return !!c.userId && confirmed.includes(c.userId);
         if (c.userId && tracker.userIds[platform].includes(c.userId)) return true;
         const u = (tracker.usernames[platform] || '').trim().toLowerCase();
         return !!u && c.name.toLowerCase().startsWith(u);
@@ -386,6 +403,86 @@
 
     function rememberUser(platform, c) {
         if (c.userId && !tracker.userIds[platform].includes(c.userId)) tracker.userIds[platform].push(c.userId);
+    }
+
+    // ---------- 確認是哪個帳號 ----------
+    // 名字很短（Naver 常只顯示前 3 個字）時會混到別人的留言：把找到的留言依帳號編號分組，讓使用者勾選自己的
+    function accountGroups() {
+        const groups = { webtoon: new Map(), naver: new Map(), ridi: new Map() };
+        tracker.sources.forEach(source => {
+            Object.entries(source.episodes || {}).forEach(([ep, e]) => (e.comments || []).forEach(c => {
+                if (!c.userId) return;
+                const map = groups[source.platform];
+                if (!map.has(c.userId)) map.set(c.userId, { id: c.userId, names: new Set(), count: 0, sample: null });
+                const g = map.get(c.userId);
+                g.names.add(c.name);
+                g.count++;
+                if (!g.sample) g.sample = { work: source.name, ep, body: c.body || '' };
+            }));
+        });
+        return groups;
+    }
+
+    // 某平台找到的留言來自好幾個帳號、而且還沒確認過
+    function unconfirmedPlatforms() {
+        const groups = accountGroups();
+        return Object.keys(groups).filter(p => groups[p].size > 1 && !tracker.confirmedIds[p].length);
+    }
+
+    function renderAccountConfirm() {
+        const groups = accountGroups();
+        const box = document.getElementById('accountConfirm');
+        const platforms = Object.keys(groups).filter(p => groups[p].size);
+        if (!platforms.length) {
+            box.innerHTML = '<div class="form-hint">掃到留言之後，這裡會列出找到的帳號讓你確認。</div>';
+            return;
+        }
+        box.innerHTML = platforms.map(p => {
+            const confirmed = tracker.confirmedIds[p];
+            const list = [...groups[p].values()].sort((a, b) => b.count - a.count);
+            return `
+                <div class="account-group">
+                    <h5>${PLATFORM_INFO[p].label}${confirmed.length ? '（已確認）' : list.length > 1 ? '（有好幾個，請勾你自己的）' : ''}</h5>
+                    ${list.map(g => `
+                        <label class="account-row">
+                            <input type="checkbox" data-account="${p}" value="${escapeHtml(g.id)}" ${!confirmed.length || confirmed.includes(g.id) ? 'checked' : ''}>
+                            <span style="flex:1; min-width:0;">
+                                <span class="who">${escapeHtml([...g.names].join('、'))}</span>
+                                <span class="sample"> · ${g.count} 則 · 帳號編號 ${escapeHtml(g.id)}</span>
+                                <div class="sample">例：${escapeHtml(g.sample.work)} 第 ${escapeHtml(g.sample.ep)} 話「${escapeHtml(g.sample.body.slice(0, 40))}${g.sample.body.length > 40 ? '…' : ''}」</div>
+                            </span>
+                        </label>`).join('')}
+                </div>`;
+        }).join('') + '<button class="btn btn-primary" style="width:100%;" onclick="applyAccountConfirm()">只保留勾選的帳號</button>'
+            + '<div class="form-hint">沒勾的帳號，找到的留言會被移除，之後掃描也只認勾選的帳號編號。</div>';
+    }
+
+    function applyAccountConfirm() {
+        const checked = { webtoon: [], naver: [], ridi: [] };
+        const shown = new Set();
+        document.querySelectorAll('[data-account]').forEach(el => {
+            shown.add(el.dataset.account);
+            if (el.checked) checked[el.dataset.account].push(el.value);
+        });
+        let removed = 0;
+        const plan = [...shown].filter(p => checked[p].length); // 一個都沒勾的平台不動
+        tracker.sources.forEach(source => {
+            if (!plan.includes(source.platform)) return;
+            Object.values(source.episodes || {}).forEach(e => {
+                const before = (e.comments || []).length;
+                e.comments = (e.comments || []).filter(c => !c.userId || checked[source.platform].includes(c.userId));
+                removed += before - e.comments.length;
+            });
+        });
+        if (removed && !confirm(`會移除 ${removed} 則不是你的留言，確定嗎？`)) return;
+        plan.forEach(p => {
+            tracker.confirmedIds[p] = [...checked[p]];
+            tracker.userIds[p] = [...checked[p]];
+        });
+        save();
+        renderAccountConfirm();
+        render();
+        alert(removed ? `已移除 ${removed} 則，之後只認勾選的帳號` : '已確認，之後只認勾選的帳號');
     }
 
     async function ridiEpisodeId(source, ep) {
@@ -658,6 +755,13 @@
             ['追蹤作品', tracker.sources.length], ['我的留言', totalComments], ['總讚數', totalLikes], ['新回覆', totalNew],
         ].map(([label, v], k) => `<div class="kpi ${k === 3 && v ? 'highlight' : ''}"><div class="kpi-value">${v}</div><div class="kpi-label">${label}</div></div>`).join('');
         document.getElementById('lastRun').textContent = tracker.lastRun ? `上次更新：${new Date(tracker.lastRun).toLocaleString()}` : '還沒更新過';
+        const warn = document.getElementById('accountWarn');
+        const unconfirmed = unconfirmedPlatforms();
+        warn.hidden = !unconfirmed.length;
+        warn.textContent = unconfirmed.length
+            ? `⚠️ ${unconfirmed.map(p => PLATFORM_INFO[p].label).join('、')} 找到的留言來自好幾個帳號，可能混到別人的。點這裡確認哪個是你`
+            : '';
+        warn.onclick = () => openSettings('accountConfirm');
 
         if (!tracker.sources.length) {
             document.getElementById('sources').innerHTML = `
@@ -716,13 +820,14 @@
     function openSettings(focusId) {
         document.querySelectorAll('[data-user]').forEach(el => { el.value = tracker.usernames[el.dataset.user] || ''; });
         document.getElementById('newPerRun').value = tracker.newPerRun;
+        renderAccountConfirm();
         renderSourceEditors(focusId);
         renderAppCandidates();
         renderAppLookup();
         document.getElementById('settings').hidden = false;
         document.getElementById('settingsBackdrop').hidden = false;
         document.body.classList.add('no-scroll');
-        if (focusId) setTimeout(() => document.getElementById(`edit-${focusId}`)?.scrollIntoView({ block: 'center' }), 50);
+        if (focusId) setTimeout(() => (document.getElementById(focusId === 'accountConfirm' ? 'accountConfirm' : `edit-${focusId}`))?.scrollIntoView({ block: 'center' }), 50);
     }
 
     function closeSettings() {
