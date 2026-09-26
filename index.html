@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-23">
+    <link rel="stylesheet" href="common.css?v=20260926-24">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -618,6 +618,7 @@
                     <tr><td>想看</td><td>還沒開始看</td></tr>
                 </table>
                 <ul>
+                    <li><b>想看</b>的作品還沒開始看，待補的位置改顯示平台「出到 N 話」（要有最新話數）。</li>
                     <li><b>📖 有得看</b>：狀態列第二顆，列出「平台最新話數比我看到的多」的作品（棄坑的不算）。想先看待補最多的，排序選「待補最多」。</li>
                     <li>平台完結時，<b>連載中／休刊會自動改成「完結」</b>；已看完、棄坑、想看是你自己的狀態，不會被改。</li>
                 </ul>
@@ -821,7 +822,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260926-23"></script>
+<script src="common.js?v=20260926-24"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added', view: 'list' }, Store.loadUi());
@@ -1069,7 +1070,7 @@
                 <div class="wall-cover">
                     ${coverHtml(r, coverUrlOf(r), 'fill')}
                     <span class="status-badge wall-status ${STATUS_CONFIG[status].cls}">${STATUS_SHORT[status]}</span>
-                    ${backlog ? `<span class="wall-backlog">待補 ${backlog}</span>` : ''}
+                    ${backlog ? `<span class="wall-backlog">待補 ${backlog}</span>` : releasedText(r) ? `<span class="wall-backlog">${releasedText(r)}</span>` : ''}
                 </div>
                 <div class="wall-title">${escapeHtml(r.title || '未命名')}</div>
                 ${sub ? `<div class="wall-sub">${escapeHtml(sub)}</div>` : ''}
@@ -1252,11 +1253,22 @@
 
     // ---------- 閱讀進度 ----------
     // 話數標籤＋待補標籤（例如「52話」「待補 3」）
+    // 想看、還沒開始看的作品：沒有待補可算，改顯示平台出到第幾話（例如「出到 181 話」「出到外傳 3 話」）
+    function releasedText(r) {
+        if ((r.status || DEFAULT_STATUS) !== '想看' || backlogOf(r)) return '';
+        const latest = latestEpisode(r);
+        if (!latest) return '';
+        const part = latest.part === 'main' ? '' : EPISODE_PARTS.find(p => p.key === latest.part)?.label || '';
+        return `出到${part ? part + ' ' : ' '}${latest.n} 話`;
+    }
+
     function episodeBadgeHtml(r) {
         const label = episodeLabel(r.episode);
         const backlog = backlogOf(r);
+        const released = releasedText(r);
         return (label ? `<span class="ep-badge">${label}</span>` : '')
-            + (backlog ? `<span class="ep-badge backlog-badge">待補 ${backlog}</span>` : '');
+            + (backlog ? `<span class="ep-badge backlog-badge">待補 ${backlog}</span>` : '')
+            + (released ? `<span class="ep-badge backlog-badge">${released}</span>` : '');
     }
 
     function progressControlsHtml(r, i) {
