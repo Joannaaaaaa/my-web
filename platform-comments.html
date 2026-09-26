@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260927-6">
+    <link rel="stylesheet" href="common.css?v=20260927-7">
     <style>
         body { padding-bottom: calc(80px + var(--safe-bottom)); } /* 留空間給底部分頁列 */
         body.no-scroll { overflow: hidden; }
@@ -71,8 +71,12 @@
         .cmt-missing { font-size: 0.75rem; color: var(--flag-text); margin-top: 4px; }
         .reply-list { margin-top: 6px; font-size: 0.82rem; }
         .reply-list summary { cursor: pointer; color: var(--link); min-height: 32px; display: flex; align-items: center; }
-        .reply { padding: 6px 0 6px 10px; border-left: 2px solid var(--border); margin-left: 2px; }
-        .reply b { color: var(--text-sub); font-weight: bold; margin-right: 6px; }
+        /* 每則回覆一張小卡片：上面一行名字（＋日期、讚數），下面才是內容，一眼分得出是不同人 */
+        .reply-items { display: grid; gap: 8px; margin-top: 4px; }
+        .reply { padding: 8px 10px; border-radius: 8px; background: var(--raised); }
+        .reply-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px; font-size: 0.75rem; color: var(--text-muted); }
+        .reply-name { font-weight: bold; font-size: 0.8rem; color: var(--link); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+        .reply-body { color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; }
         .show-more { border: none; background: none; color: var(--link); font-weight: bold; padding: 10px 0 0; cursor: pointer; font-size: 0.85rem; }
         .empty { text-align: center; color: var(--text-faint); padding: 40px 12px; line-height: 1.8; }
 
@@ -332,7 +336,7 @@
     <div class="form-hint">平常更新只重新檢查 90 天內的留言；這個會檢查全部，比較久。</div>
 </div>
 
-<script src="common.js?v=20260927-6"></script>
+<script src="common.js?v=20260927-7"></script>
 <script>
     // API_BASE_URL 在 common.js
     const PLATFORM_INFO = {
@@ -975,7 +979,17 @@
                 ${c.replyList?.length ? `
                     <details class="reply-list" ${fresh ? 'open' : ''}>
                         <summary>查看回覆（${c.replyList.length}）</summary>
-                        ${c.replyList.map(r => `<div class="reply"><b>${escapeHtml(r.name)}</b>${escapeHtml(r.body)}</div>`).join('')}
+                        <div class="reply-items">
+                            ${c.replyList.map(r => `
+                                <div class="reply">
+                                    <div class="reply-head">
+                                        <span class="reply-name">${escapeHtml(r.name || '（匿名）')}</span>
+                                        ${r.createdAt ? `<span>${fmtDate(r.createdAt)}</span>` : ''}
+                                        ${r.likes ? `<span>👍 ${r.likes}</span>` : ''}
+                                    </div>
+                                    <div class="reply-body">${escapeHtml(r.body)}</div>
+                                </div>`).join('')}
+                        </div>
                     </details>` : ''}
             </div>`;
     }
