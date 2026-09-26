@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-26">
+    <link rel="stylesheet" href="common.css?v=20260927-1">
     <style>
         body { padding-bottom: calc(80px + var(--safe-bottom)); } /* 留空間給底部分頁列 */
         body.no-scroll { overflow: hidden; }
@@ -296,7 +296,7 @@
     <div class="form-hint">平常更新只重新檢查 90 天內的留言；這個會檢查全部，比較久。</div>
 </div>
 
-<script src="common.js?v=20260926-26"></script>
+<script src="common.js?v=20260927-1"></script>
 <script>
     // API_BASE_URL 在 common.js
     const PLATFORM_INFO = {
@@ -682,6 +682,7 @@
             box.hidden = !errors.length;
             box.innerHTML = errors.map(e => `<div>⚠️ ${escapeHtml(e)}</div>`).join('');
             render();
+            ensureEpisodeTitles(); // 新找到的留言補上話次標題
         }
     }
 
@@ -717,12 +718,57 @@
         return `${d.getFullYear() !== new Date().getFullYear() ? d.getFullYear() + '/' : ''}${d.getMonth() + 1}/${d.getDate()}`;
     }
 
-    function commentHtml(c, platform) {
+    // ---------- 話次標題（外傳顯示成「外傳 1 話」，不是網址編號「第 229 話」） ----------
+    // source.epTitles = { 網址編號: 平台上的標題 }，只存有留言的話數；缺的從伺服器 /episode-titles 補
+    function episodeTitleLabel(title) {
+        let t = String(title || '').trim();
+        if (!t) return '';
+        if (/[\u4e00-\u9fff]/.test(t) && !/[\uac00-\ud7a3]/.test(t)) return t; // 台版：本來就是中文標題
+        const special = /특별\s*외전|특외|특별편/.test(t);
+        const side = !special && /외전|번외/.test(t);
+        const after = /후기/.test(t);
+        const nums = [...t.matchAll(/(\d+)\s*화/g)];
+        const lead = t.match(/^(\d+)\.\s/); // Naver 有些作品寫「331. 제107장 …」
+        const n = nums.length ? Number(nums[nums.length - 1][1]) : lead ? Number(lead[1]) : null;
+        const last = /마지막\s*화|최종화/.test(t);
+        const season = (t.match(/(\d+)\s*부(?![가-힣])/) || [])[1]; // 2부 144화 → 第 2 部
+        const part = special ? '特別外傳' : side ? '外傳' : season ? `第 ${season} 部` : '';
+        const plain = t.replace(/^.*\[(?:완전판|개정판)\]\s*/, ''); // Ridi 標題前面是作品名＋[완전판]
+        if (!special && !side && after && n == null) return '後記';
+        if (!special && !side && n == null) return plain; // 序章、公告這類：直接顯示
+        if (n == null && !last) return `${part}（${plain.replace(/특별\s*외전|특외|특별편|외전|번외/, '').replace(/^[\s:：-]+/, '').trim()}）`;
+        const label = n != null ? `${part ? part + ' ' : ''}${n} 話` : `${part} 最終話`;
+        return label + (after && part ? '＋後記' : '');
+    }
+
+    function episodeLabelOf(source, ep) {
+        const title = source.epTitles?.[ep + (Number(source.offset) || 0)];
+        return title ? episodeTitleLabel(title) : `第 ${ep} 話`;
+    }
+
+    const titleFetching = new Set();
+    async function ensureEpisodeTitles() {
+        for (const source of tracker.sources) {
+            const eps = Object.entries(source.episodes || {}).filter(([, e]) => e.comments?.length).map(([ep]) => Number(ep) + (Number(source.offset) || 0));
+            const missing = eps.filter(no => !source.epTitles?.[no]);
+            if (!missing.length || titleFetching.has(source.id)) continue;
+            titleFetching.add(source.id);
+            try {
+                const { titles } = await api(`/episode-titles?platform=${source.platform}&seriesId=${source.seriesId}`);
+                source.epTitles = Object.fromEntries(eps.filter(no => titles[no]).map(no => [no, titles[no]]));
+                save();
+                render();
+            } catch { /* 查不到就先顯示編號，下次打開再試 */ }
+            await sleep(REQUEST_GAP);
+        }
+    }
+
+    function commentHtml(c, platform, source) {
         const fresh = newRepliesOf(c);
         return `
             <div class="cmt ${fresh ? 'has-new' : ''}">
                 <div class="cmt-meta">
-                    <span class="ep-badge">第 ${c.ep} 話</span>
+                    <span class="ep-badge" title="網址第 ${c.ep + (Number(source?.offset) || 0)} 號">${escapeHtml(source ? episodeLabelOf(source, c.ep) : `第 ${c.ep} 話`)}</span>
                     ${c.best ? '<span class="best">BEST</span>' : ''}
                     ${c.kind === 'reply' ? '<span>回覆別人</span>' : ''}
                     <span>${fmtDate(c.createdAt)}</span>
@@ -789,7 +835,7 @@
                         <div class="source-sub">已掃到第 ${s.lastScanned || 0} 話 · 留言 ${comments.length} 則${pending ? ` · ${pending} 話待檢查` : ''}</div>
                     </summary>
                     <div class="source-body">
-                        ${comments.length ? shown.map(c => commentHtml(c, s.platform)).join('') : '<div class="empty" style="padding:16px;">還沒找到你的留言</div>'}
+                        ${comments.length ? shown.map(c => commentHtml(c, s.platform, s)).join('') : '<div class="empty" style="padding:16px;">還沒找到你的留言</div>'}
                         ${comments.length > shown.length ? `<button class="show-more" onclick="expanded.add('${s.id}'); render();">顯示全部 ${comments.length} 則</button>` : ''}
                         <div class="source-actions">
                             ${fresh ? `<button class="btn btn-primary" onclick="markSeen('${s.id}')">新回覆都看過了</button>` : ''}
@@ -1085,7 +1131,8 @@
     }
 
     render();
-    wakeServer();
+    // 叫醒伺服器後，補上還沒有標題的話數（file:// 測試時不連）
+    wakeServer().then(ok => { if (ok) ensureEpisodeTitles(); });
 </script>
 </body>
 </html>

@@ -523,6 +523,58 @@ app.get('/cover-image', async (req, res) => {
     }
 });
 
+// 平台留言頁用：作品每一話「網址編號 → 標題」，讓外傳顯示成「外傳 1 話」而不是第 229 話
+// 回傳 { titles: { 編號: 標題 } }；同一部作品快取 6 小時
+const episodeTitleCache = new Map();
+async function naverTitles(id) {
+    const headers = { 'user-agent': MOBILE_UA };
+    const titles = {};
+    for (let page = 1; page <= 60; page++) {
+        const list = await (await fetch(`https://comic.naver.com/api/article/list?titleId=${id}&page=${page}&sort=DESC`, { headers })).json();
+        [...(page === 1 ? list.chargeFolderArticleList || [] : []), ...(list.articleList || [])].forEach(a => { titles[a.no] = a.subtitle; });
+        if (page >= (list.pageInfo?.totalPages || 1)) break;
+    }
+    return titles;
+}
+async function ridiTitles(bookId) {
+    const page = await fetch(`https://ridibooks.com/books/${bookId}`, { headers: { 'user-agent': MOBILE_UA } });
+    if (!page.ok) throw new Error(`Ridi ${page.status}`);
+    const html = await page.text();
+    const titles = {};
+    const re = /"id":"\d{6,}","title":"((?:[^"\\]|\\.)*)","series_title":(?:null|"(?:[^"\\]|\\.)*"),"author":(?:null|"(?:[^"\\]|\\.)*"),"genre":"[a-z]+","pub_id":"\d+","volume":"(\d+)"/g;
+    let m;
+    while ((m = re.exec(html))) if (!titles[m[2]]) titles[m[2]] = JSON.parse(`"${m[1]}"`);
+    return titles;
+}
+async function webtoonTitles(titleNo) {
+    const titles = {};
+    let cursor = '';
+    for (let k = 0; k < 100; k++) {
+        const r = await fetch(`https://m.webtoons.com/api/v1/webtoon/${titleNo}/episodes?pageSize=100${cursor ? `&cursor=${cursor}` : ''}`, { headers: { 'user-agent': MOBILE_UA } });
+        const d = (await r.json()).result || {};
+        (d.episodeList || []).forEach(e => { titles[e.episodeNo] = e.episodeTitle; });
+        if (!d.nextCursor || !(d.episodeList || []).length || String(d.nextCursor) === String(cursor)) break;
+        cursor = d.nextCursor;
+    }
+    return titles;
+}
+const EPISODE_TITLES = { naver: naverTitles, ridi: ridiTitles, webtoon: webtoonTitles };
+app.get('/episode-titles', async (req, res) => {
+    const { platform, seriesId } = req.query;
+    if (!EPISODE_TITLES[platform]) return res.status(400).send('platform 必須是 naver、ridi 或 webtoon');
+    if (!/^\d+$/.test(seriesId || '')) return res.status(400).send('seriesId 格式錯誤');
+    const key = `${platform}:${seriesId}`;
+    const cached = episodeTitleCache.get(key);
+    if (cached && Date.now() - cached.at < 6 * 60 * 60 * 1000) return res.json({ titles: cached.titles });
+    try {
+        const titles = await EPISODE_TITLES[platform](seriesId);
+        episodeTitleCache.set(key, { at: Date.now(), titles });
+        res.json({ titles });
+    } catch (error) {
+        res.status(500).send('抓取話次標題失敗');
+    }
+});
+
 // 讓 Render 或本機環境動態決定連接埠
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
