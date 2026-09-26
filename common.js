@@ -769,8 +769,10 @@ const API_BASE_URL = globalThis.location?.protocol === 'https:'
 
 // App 平台名稱 → 伺服器的平台代號
 const AUTOFILL_PLATFORMS = { "Naver": 'naver', "Ridibooks": 'ridi', "Naver Series": 'series', "Bomtoon": 'bomtoon', "Kakao": 'kakao' };
-// KakaoPage 只能貼網址查（不能用標題搜尋），也拿不到最新話數：不參加批次更新和每天自動檢查
+// KakaoPage 不能用標題搜尋、也拿不到最新話數：不參加批次更新和每天自動檢查。
+// 沒貼網址時改到 Kakao Webtoon（很多 KakaoPage 作品也在那裡）用標題搜尋，拿作者、封面、完結、更新日
 const AUTOFILL_LINK_ONLY = ['Kakao'];
+const AUTOFILL_SEARCH_VIA = { "Kakao": 'kakaowebtoon' };
 const canAutoSync = platform => !!AUTOFILL_PLATFORMS[platform] && !AUTOFILL_LINK_ONLY.includes(platform);
 
 // 從作品網址取出作品編號，認不出來回傳空字串
@@ -847,10 +849,12 @@ async function serverApi(path) {
 
 const Autofill = {
     // 回傳 [{ seriesId, title, author, edition }]
-    search: (platform, keyword) =>
-        serverApi(`/search-series?platform=${AUTOFILL_PLATFORMS[platform]}&keyword=${encodeURIComponent(keyword)}`),
-    // 回傳 { url, title, cover, latest, day, finished, people: { author, adapter, artist, studio } }
-    info: (platform, id) => serverApi(`/series-info?platform=${AUTOFILL_PLATFORMS[platform]}&id=${encodeURIComponent(id)}`),
+    // source：查資料用的伺服器平台代號，預設跟 App 平台一樣（KakaoPage 沒網址時改查 Kakao Webtoon）
+    search: (platform, keyword, source = AUTOFILL_PLATFORMS[platform]) =>
+        serverApi(`/search-series?platform=${source}&keyword=${encodeURIComponent(keyword)}`),
+    // 回傳 { url, title, cover, latest, day, finished, people: { author, adapter, artist, studio }, unassigned? }
+    info: (platform, id, source = AUTOFILL_PLATFORMS[platform]) =>
+        serverApi(`/series-info?platform=${source}&id=${encodeURIComponent(id)}`),
     // 下載封面、裁切壓縮後存進 IndexedDB，回傳新的 coverId
     async saveCover(url) {
         const res = await fetch(`${API_BASE_URL}/cover-image?url=${encodeURIComponent(url)}`);
@@ -1107,6 +1111,7 @@ function createReviewForm(container, options = {}) {
 
     // ---------- 從平台自動填入 ----------
     let afPlatform = '';
+    let afSource = ''; // 搜尋結果來自哪個伺服器平台代號
     let afToken = 0; // 查詢期間又按了別的，舊的結果就丟掉
     function afStatus(text, cls = '') {
         const el = $('[data-role="af-status"]');
@@ -1134,22 +1139,25 @@ function createReviewForm(container, options = {}) {
         $('[data-role="af-results"]').innerHTML = '';
         const id = workIdFromLink(platform, $(`[data-link="${platform}"]`).value);
         if (id) return afApply(platform, id, token);
-        if (AUTOFILL_LINK_ONLY.includes(platform)) {
-            return afStatus('KakaoPage 不能用標題搜尋：先在下面「發行平台」貼上 KakaoPage 作品網址（page.kakao.com/content/…），再按一次', 'bad');
-        }
+        afSource = AUTOFILL_SEARCH_VIA[platform] || AUTOFILL_PLATFORMS[platform];
+        const where = AUTOFILL_SEARCH_VIA[platform] ? 'Kakao Webtoon' : platform;
         const keyword = $('[data-field="krTitle"]').value.trim() || cleanTitleBrackets($('[data-field="title"]').value);
         if (!keyword) return afStatus('先填韓文標題（或漫畫名稱）再查', 'bad');
-        afStatus(`在 ${platform} 搜尋「${keyword}」…`);
+        afStatus(`在 ${where} 搜尋「${keyword}」…`);
         let results;
         try {
-            results = await afWait(Autofill.search(platform, keyword), token);
+            results = await afWait(Autofill.search(platform, keyword, afSource), token);
         } catch (err) {
             if (token === afToken) afStatus(`查詢失敗：${err.message === 'Failed to fetch' ? '連不上伺服器' : err.message}`, 'bad');
             return;
         }
         if (token !== afToken) return;
-        if (!results.length) return afStatus(`${platform} 找不到「${keyword}」，可以改韓文標題再試，或直接貼作品網址`, 'bad');
-        afStatus(`找到 ${results.length} 部，點選正確的作品：`);
+        if (!results.length) {
+            return afStatus(AUTOFILL_SEARCH_VIA[platform]
+                ? `Kakao Webtoon 找不到「${keyword}」（不是每部 KakaoPage 作品都有）。可以貼 KakaoPage 作品網址再按一次，至少能填封面和標題`
+                : `${platform} 找不到「${keyword}」，可以改韓文標題再試，或直接貼作品網址`, 'bad');
+        }
+        afStatus(`${AUTOFILL_SEARCH_VIA[platform] ? '在 Kakao Webtoon ' : ''}找到 ${results.length} 部，點選正確的作品：`);
         $('[data-role="af-results"]').innerHTML = results.slice(0, 10).map(r => `
             <button type="button" class="autofill-result" data-af-pick="${escapeHtml(r.seriesId)}">
                 <span class="autofill-result-title">${escapeHtml(r.title)}</span>
@@ -1157,12 +1165,13 @@ function createReviewForm(container, options = {}) {
                 ${r.author ? `<span class="autofill-result-sub">${escapeHtml(r.author)}</span>` : ''}
             </button>`).join('');
     }
-    async function afApply(platform, id, token = ++afToken) {
+    // source 不是平台本身時（KakaoPage 從 Kakao Webtoon 查），不填作品網址
+    async function afApply(platform, id, token = ++afToken, source = AUTOFILL_PLATFORMS[platform]) {
         $('[data-role="af-results"]').innerHTML = '';
         afStatus('讀取作品資料…');
         let info;
         try {
-            info = await afWait(Autofill.info(platform, id), token);
+            info = await afWait(Autofill.info(platform, id, source), token);
         } catch (err) {
             if (token === afToken) afStatus(`查詢失敗：${err.message === 'Failed to fetch' ? '連不上伺服器' : err.message}`, 'bad');
             return;
@@ -1172,7 +1181,10 @@ function createReviewForm(container, options = {}) {
         const notes = [];
         if (!state.platforms.includes(platform)) state.platforms = [...state.platforms, platform];
         const linkEl = $(`[data-link="${platform}"]`);
-        if (!linkEl.value.trim()) { linkEl.value = info.url; filled.push('作品網址'); }
+        const fromOther = source !== AUTOFILL_PLATFORMS[platform];
+        if (fromOther) notes.push('資料來自 Kakao Webtoon；KakaoPage 作品網址請自己貼');
+        else if (!linkEl.value.trim()) { linkEl.value = info.url; filled.push('作品網址'); }
+        if (info.peopleFrom) notes.push(`作者角色來自 ${info.peopleFrom} 的同名作品`);
         const krEl = $('[data-field="krTitle"]');
         if (!krEl.value.trim() && info.title) { krEl.value = cleanPlatformTitle(info.title); filled.push('韓文標題'); }
         let people = 0;
@@ -1267,7 +1279,7 @@ function createReviewForm(container, options = {}) {
         const afBtn = e.target.closest('button[data-af-platform]');
         if (afBtn) return afRun(afBtn.dataset.afPlatform);
         const pick = e.target.closest('button[data-af-pick]');
-        if (pick) return afApply(afPlatform, pick.dataset.afPick);
+        if (pick) return afApply(afPlatform, pick.dataset.afPick, undefined, afSource);
         const assign = e.target.closest('button[data-af-assign]');
         if (assign) {
             const el = $(`[data-field="${assign.dataset.afAssign}"]`);

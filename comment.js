@@ -164,6 +164,8 @@ app.get('/search-series', async (req, res) => {
                 const [name, extra = ''] = decodeEntities(m[2]).split('\n');
                 results.push({ seriesId: m[1], title: name.trim(), author: '', edition: extra.includes('완결') && !extra.includes('미완결') ? '완결' : '' });
             }
+        } else if (platform === 'kakaowebtoon') {
+            results = await kakaoWebtoonSearch(keyword);
         } else if (platform === 'bomtoon') {
             const r = await fetch(`https://www.bomtoon.com/api/balcony-search-api/search?searchText=${q}`, { headers: { 'user-agent': DESKTOP_UA } });
             const data = await r.json();
@@ -172,7 +174,7 @@ app.get('/search-series', async (req, res) => {
                 edition: (b.title.match(/\[(완전판|개정판)\]/) || [])[1] || '',
             }));
         } else {
-            return res.status(400).send('platform 必須是 naver、ridi、webtoon、series 或 bomtoon');
+            return res.status(400).send('platform 必須是 naver、ridi、webtoon、series、bomtoon 或 kakaowebtoon');
         }
         res.json(results);
     } catch (error) {
@@ -388,6 +390,45 @@ async function bomtoonInfo(alias) {
     };
 }
 
+// Kakao Webtoon（webtoon.kakao.com，跟 KakaoPage 不同平台，但很多 KakaoPage 作品也在這裡）：
+// 搜尋、作品資料（作者有角色、封面、完結、更新星期）是公開的；話次清單要登入 token，拿不到最新話數
+const KW_API = 'https://gateway-kw.kakao.com';
+const KW_DAYS = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
+const serverTitleKey = t => String(t || '').replace(/\[[^\]]*\]|\([^)]*\)/g, '').replace(/\s+/g, '').toLowerCase();
+
+async function kakaoWebtoonSearch(keyword) {
+    const r = await fetch(`${KW_API}/search/v2/content?word=${encodeURIComponent(keyword)}&limit=10&offset=0`, { headers: { 'user-agent': MOBILE_UA } });
+    const data = await r.json();
+    return (data.data?.content || []).map(c => ({ seriesId: String(c.id), title: c.title, author: '', edition: '' }));
+}
+
+async function kakaoWebtoonInfo(id) {
+    const r = await fetch(`${KW_API}/decorator/v2/decorator/contents/${id}`, { headers: { 'user-agent': MOBILE_UA } });
+    const d = (await r.json().catch(() => ({}))).data;
+    if (!d?.title) throw new Error('找不到作品');
+    const people = { author: [], adapter: [], artist: [], studio: [] };
+    const unassigned = [];
+    for (const a of d.authors || []) {
+        if (a.type === 'ORIGINAL_STORY') people.author.push(a.name);
+        else if (a.type === 'AUTHOR') people.adapter.push(a.name);
+        else if (a.type === 'ILLUSTRATOR') people.artist.push(a.name);
+        else if (a.type !== 'PUBLISHER') unassigned.push(a.name); // 出版社不算創作團隊
+    }
+    const badges = (d.badges || []).map(b => String(b.title || '').toLowerCase());
+    const cover = d.sharingThumbnailImage || d.thumbnailImage || '';
+    return {
+        title: d.title,
+        url: `https://webtoon.kakao.com/content/${encodeURIComponent(d.seoId || 'x')}/${id}`,
+        cover: cover && !/\.(jpe?g|png|webp)$/i.test(cover) ? `${cover}.jpg` : cover,
+        latest: null,
+        latestParts: { main: null, side: null, after: null },
+        day: badges.map(b => KW_DAYS[b]).find(Boolean) || '',
+        finished: badges.includes('completed'),
+        people,
+        unassigned,
+    };
+}
+
 // KakaoPage：API 都會擋，但給「分享預覽機器人」的頁面有標題、封面、作者（沒有角色）和前幾話
 // 沒有最新話數、也不能用標題搜尋（只能貼網址）；作者放在 unassigned，讓使用者自己分到 글／그림／원작
 const PREVIEW_BOT_UA = 'facebookexternalhit/1.1';
@@ -407,6 +448,26 @@ async function kakaoInfo(id) {
     }
     const text = decodeEntities(html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, ' '));
     const dayMatch = text.match(/매주\s*([월화수목금토일])요일/);
+    // 同名作品也在 Kakao Webtoon 的話，用那邊有角色的作者、完結狀態、更新星期
+    let kw = null;
+    try {
+        const hits = (await kakaoWebtoonSearch(title)).filter(h => serverTitleKey(h.title) === serverTitleKey(title));
+        if (hits.length === 1) kw = await kakaoWebtoonInfo(hits[0].seriesId);
+    } catch { /* 查不到就用 KakaoPage 自己的資料 */ }
+    if (kw) {
+        return {
+            title,
+            url: `https://page.kakao.com/content/${id}`,
+            cover: meta('image') || kw.cover,
+            latest: null,
+            latestParts: { main: null, side: null, after: null },
+            day: (dayMatch ? DAY_FROM_KR[dayMatch[1]] : '') || kw.day,
+            finished: kw.finished,
+            people: kw.people,
+            unassigned: kw.unassigned,
+            peopleFrom: 'Kakao Webtoon',
+        };
+    }
     return {
         title,
         url: `https://page.kakao.com/content/${id}`,
@@ -420,10 +481,10 @@ async function kakaoInfo(id) {
     };
 }
 
-const SERIES_INFO = { naver: naverInfo, ridi: ridiInfo, series: seriesInfo, bomtoon: bomtoonInfo, kakao: kakaoInfo };
+const SERIES_INFO = { naver: naverInfo, ridi: ridiInfo, series: seriesInfo, bomtoon: bomtoonInfo, kakao: kakaoInfo, kakaowebtoon: kakaoWebtoonInfo };
 app.get('/series-info', async (req, res) => {
     const { platform, id } = req.query;
-    if (!SERIES_INFO[platform]) return res.status(400).send('platform 必須是 naver、ridi、series、bomtoon 或 kakao');
+    if (!SERIES_INFO[platform]) return res.status(400).send('platform 必須是 naver、ridi、series、bomtoon、kakao 或 kakaowebtoon');
     const idPattern = platform === 'bomtoon' ? /^[A-Za-z0-9_-]+$/ : /^\d+$/;
     if (!idPattern.test(id || '')) return res.status(400).send('id 格式錯誤');
     try {
@@ -434,7 +495,7 @@ app.get('/series-info', async (req, res) => {
 });
 
 // 封面圖轉發：瀏覽器要拿到圖片檔才能存進 IndexedDB，只允許平台的圖片網域
-const COVER_HOSTS = /(^|\.)(pstatic\.net|ridicdn\.net|balcony\.studio)$|^dn-img-page\.kakao\.com$/;
+const COVER_HOSTS = /(^|\.)(pstatic\.net|ridicdn\.net|balcony\.studio)$|^dn-img-page\.kakao\.com$|^kr-a\.kakaopagecdn\.com$/;
 app.get('/cover-image', async (req, res) => {
     let target;
     try { target = new URL(String(req.query.url || '')); } catch { return res.status(400).send('網址錯誤'); }

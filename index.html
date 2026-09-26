@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-22">
+    <link rel="stylesheet" href="common.css?v=20260926-23">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -676,7 +676,8 @@
             <summary>從平台自動填入（編輯頁）</summary>
             <div class="help-body">
                 <ul>
-                    <li>支援 <b>Naver、Ridi、Naver Series、Bomtoon</b>。<b>KakaoPage</b> 只能先貼作品網址再查，可以填韓文標題、封面、更新日（介紹裡有寫才有）；作者沒標角色，要自己點放到 원작／글／그림；抓不到最新話數，也不參加批次更新和每天自動檢查。</li>
+                    <li>支援 <b>Naver、Ridi、Naver Series、Bomtoon、KakaoPage</b>。</li>
+                    <li><b>KakaoPage</b>：沒貼網址時，用韓文標題到 <b>Kakao Webtoon</b> 搜尋（很多 KakaoPage 作品也在那裡），填作者（分好角色）、封面、更新日、完結；KakaoPage 網址要自己貼。有貼網址時，直接抓 KakaoPage 的標題、封面，作者會去 Kakao Webtoon 找同名作品分角色，找不到就列出名字讓你點放到 원작／글／그림。<b>KakaoPage 抓不到最新話數</b>，也不參加批次更新和每天自動檢查。</li>
                     <li>按「🔎 從平台自動填入」→ 選平台：有填作品網址就直接查，沒有就用韓文標題搜尋、點選正確的作品。</li>
                     <li>會填：作品網址、韓文標題、封面、創作團隊（원작／글／그림／製作團隊）、平台最新話數、更新日。</li>
                     <li><b>只填空白的欄位</b>。平台最新話數例外，會改成平台上的數字（看外傳／後記時填那一段的）。</li>
@@ -820,7 +821,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260926-22"></script>
+<script src="common.js?v=20260926-23"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added', view: 'list' }, Store.loadUi());
