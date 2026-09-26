@@ -144,8 +144,25 @@
 
     <h4>從 App 加入</h4>
     <div id="appCandidates"></div>
+    <div id="appLookup" style="margin-top:8px;"></div>
 
-    <h4>新增追蹤作品</h4>
+    <h4>用標題搜尋</h4>
+    <div style="display:flex; gap:8px;">
+        <select class="input" id="searchPlatform" style="max-width:130px;">
+            <option value="naver">Naver</option>
+            <option value="ridi">Ridi</option>
+            <option value="webtoon">台版 Webtoon</option>
+        </select>
+        <input class="input" id="searchKeyword" placeholder="韓文標題（台版用中文）" enterkeyhint="search">
+    </div>
+    <div style="display:flex; gap:8px; margin-top:8px;">
+        <input class="input" id="searchFrom" inputmode="numeric" placeholder="已看到第幾話（選填）">
+        <button class="btn btn-primary" style="flex-shrink:0;" onclick="runTitleSearch()">搜尋</button>
+    </div>
+    <div class="form-hint">Naver、Ridi 用韓文標題；台版 Webtoon 用台版的中文譯名。Ridi 只會列出漫畫。</div>
+    <div id="searchResults"></div>
+
+    <h4>貼網址新增</h4>
     <input class="input" id="addUrl" placeholder="貼上作品網址（Webtoon、Naver、Ridi）" inputmode="url" autocapitalize="off" autocorrect="off">
     <div class="detect" id="addDetect"></div>
     <div class="form-row" style="margin-top:8px;">
@@ -603,6 +620,7 @@
         document.getElementById('newPerRun').value = tracker.newPerRun;
         renderSourceEditors(focusId);
         renderAppCandidates();
+        renderAppLookup();
         document.getElementById('settings').hidden = false;
         document.getElementById('settingsBackdrop').hidden = false;
         document.body.classList.add('no-scroll');
@@ -686,6 +704,173 @@
                 </div>`).join('')}
             ${list.length > 1 ? `<button class="btn" style="width:100%;" onclick="addFromApp('all')">全部加入（${list.length} 部）</button>` : ''}`
             : '<div class="form-hint">App 裡有填 Naver 或 Ridi 作品網址的作品都已經在追蹤了。要加入其他作品，先到 App 的作品編輯頁填平台網址。</div>';
+    }
+
+    // ---------- 用標題查作品 ----------
+    // 比對時去掉 [완전판] 這類版本標記、(暴夜) 這類括號與空格
+    const baseTitle = t => String(t || '').replace(/\s*\[[^\]]*\]\s*$/, '').replace(/\([^)]*\)/g, '');
+    const sameTitle = (a, b) => !!a && !!b && squash(baseTitle(a)) === squash(baseTitle(b));
+
+    function searchSeries(platform, keyword) {
+        return api(`/search-series?platform=${platform}&keyword=${encodeURIComponent(keyword)}`);
+    }
+
+    // 標題完全一樣且只有一個才算對上；Ridi 有完整版／修訂版時選완전판（使用者的選擇）
+    function pickMatch(platform, results, title) {
+        const exact = results.filter(r => sameTitle(r.title, title));
+        if (platform === 'ridi') {
+            const full = exact.filter(r => r.edition === '완전판');
+            if (full.length === 1) return { match: full[0], options: exact };
+        }
+        return { match: exact.length === 1 ? exact[0] : null, options: exact.length ? exact : results.slice(0, 5) };
+    }
+
+    // App 裡有 Naver／Ridi 平台、有韓文標題、但沒填網址也還沒追蹤的作品
+    function appLookupTargets() {
+        const out = [];
+        Store.loadReviews().forEach(r => {
+            if (!r.krTitle) return;
+            Object.entries(APP_PLATFORM_KEYS).forEach(([appKey, platform]) => {
+                if (!(r.platforms || []).includes(appKey) || parseSourceUrl((r.links || {})[appKey])) return;
+                if (tracker.sources.some(s => s.platform === platform && [r.krTitle, r.title].some(t => sameTitle(t, s.name)))) return;
+                out.push({ platform, review: r });
+            });
+        });
+        return out;
+    }
+
+    let lookupResults = null; // [{ platform, review, status, match, options }]
+    let lookupRunning = false;
+
+    function renderAppLookup() {
+        const box = document.getElementById('appLookup');
+        const targets = appLookupTargets();
+        if (!lookupResults) {
+            box.innerHTML = targets.length
+                ? `<button class="btn" style="width:100%;" onclick="runAppLookup()">🔍 用韓文標題查其他 ${targets.length} 部（沒填網址的）</button>`
+                : '';
+            return;
+        }
+        const rows = lookupResults.filter(x => x.status !== 'tracked' && !(x.status === 'added'));
+        box.innerHTML = rows.map((x, k) => {
+            const info = PLATFORM_INFO[x.platform];
+            const name = cleanTitleBrackets(x.review.title);
+            let right;
+            if (x.status === 'pending') right = '<span class="detect">查詢中…</span>';
+            else if (x.status === 'none') right = '<span class="detect">查不到</span>';
+            else if (x.status === 'error') right = '<span class="detect" style="color: var(--danger);">查詢失敗</span>';
+            else if (x.status === 'match') right = `<button class="btn btn-primary" style="min-height:34px; padding:0 12px; font-size:0.8rem;" onclick="addLookup(${lookupResults.indexOf(x)})">加入</button>`;
+            else right = `
+                <select class="input" id="lookupPick-${lookupResults.indexOf(x)}" style="min-height:34px; padding:4px 8px; font-size:0.8rem; max-width:150px;">
+                    ${x.options.map((o, i) => `<option value="${i}">${escapeHtml(o.title)}${o.author ? `（${escapeHtml(o.author)}）` : ''}</option>`).join('')}
+                </select>
+                <button class="btn btn-primary" style="min-height:34px; padding:0 12px; font-size:0.8rem;" onclick="addLookup(${lookupResults.indexOf(x)}, true)">加入</button>`;
+            const sub = x.status === 'match'
+                ? `由標題查到：${escapeHtml(x.match.title)}${x.match.author ? ` · ${escapeHtml(x.match.author)}` : ''}`
+                : x.status === 'choose' ? '有好幾個結果，請選一個' : escapeHtml(x.review.krTitle);
+            return `
+                <div class="src-edit" style="display:flex; align-items:center; gap:8px; ${['none', 'error'].includes(x.status) ? 'opacity:0.6;' : ''}">
+                    <span class="tag" style="--tag-color: ${info.color}">${info.label}</span>
+                    <div style="flex:1; min-width:0;">
+                        <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(name)}</div>
+                        <div class="detect" style="margin:0;">${sub}</div>
+                    </div>
+                    ${right}
+                </div>`;
+        }).join('') || '<div class="form-hint">查到的都已經加入了</div>';
+        const matches = lookupResults.filter(x => x.status === 'match').length;
+        if (matches > 1 && !lookupRunning) box.innerHTML += `<button class="btn" style="width:100%;" onclick="addAllLookup()">加入全部對上的（${matches} 部）</button>`;
+    }
+
+    async function runAppLookup() {
+        if (lookupRunning) return;
+        lookupRunning = true;
+        lookupResults = appLookupTargets().map(t => ({ ...t, status: 'pending' }));
+        renderAppLookup();
+        for (const x of lookupResults) {
+            try {
+                const results = await searchSeries(x.platform, x.review.krTitle);
+                const { match, options } = pickMatch(x.platform, results, x.review.krTitle);
+                if (match && findSource(x.platform, match.seriesId)) x.status = 'tracked';
+                else if (match) Object.assign(x, { status: 'match', match, options });
+                else if (options.length) Object.assign(x, { status: 'choose', options });
+                else x.status = 'none';
+            } catch (err) {
+                x.status = 'error';
+            }
+            renderAppLookup();
+            await sleep(REQUEST_GAP);
+        }
+        lookupRunning = false;
+        renderAppLookup();
+    }
+
+    function lookupSource(x, series) {
+        const ep = normalizeEpisode(x.review.episode)?.main || 0;
+        return createSource({
+            platform: x.platform, seriesId: series.seriesId, name: cleanTitleBrackets(x.review.title) || series.title,
+            lastScanned: Math.max(0, ep - tracker.newPerRun),
+        });
+    }
+
+    function addLookup(k, fromSelect = false) {
+        const x = lookupResults[k];
+        const series = fromSelect ? x.options[Number(document.getElementById(`lookupPick-${k}`).value)] : x.match;
+        if (findSource(x.platform, series.seriesId)) return alert('這部已經在追蹤了');
+        lookupSource(x, series);
+        x.status = 'added';
+        save();
+        renderAppLookup();
+        renderSourceEditors();
+    }
+
+    function addAllLookup() {
+        lookupResults.filter(x => x.status === 'match' && !findSource(x.platform, x.match.seriesId)).forEach(x => {
+            lookupSource(x, x.match);
+            x.status = 'added';
+        });
+        save();
+        renderAppLookup();
+        renderSourceEditors();
+    }
+
+    // 手動用標題搜尋（台版 Webtoon 也可以）
+    let searchList = [];
+    async function runTitleSearch() {
+        const platform = document.getElementById('searchPlatform').value;
+        const keyword = document.getElementById('searchKeyword').value.trim();
+        const box = document.getElementById('searchResults');
+        if (!keyword) return;
+        box.innerHTML = '<div class="detect">搜尋中…</div>';
+        try {
+            const results = await searchSeries(platform, keyword);
+            // Ridi 同名有完整版時排在前面
+            searchList = results.sort((a, b) => (b.edition === '완전판') - (a.edition === '완전판')).slice(0, 10);
+        } catch (err) {
+            box.innerHTML = `<div class="detect" style="color: var(--danger);">搜尋失敗：${escapeHtml(err.message === 'Failed to fetch' ? '連不上伺服器' : err.status === 404 ? '伺服器還沒更新（需要 push 讓 Render 重新部署）' : err.message)}</div>`;
+            return;
+        }
+        box.innerHTML = searchList.length ? searchList.map((r, k) => {
+            const tracked = findSource(platform, r.seriesId);
+            return `
+                <div class="src-edit" style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+                    <div style="flex:1; min-width:0;">
+                        <div>${escapeHtml(r.title)}</div>
+                        <div class="detect" style="margin:0;">${escapeHtml(r.author || '')}</div>
+                    </div>
+                    ${tracked ? '<span class="detect">已追蹤</span>' : `<button class="btn btn-primary" style="min-height:34px; padding:0 12px; font-size:0.8rem;" onclick="addSearchResult(${k})">加入</button>`}
+                </div>`;
+        }).join('') : '<div class="detect">查不到，換個寫法試試（台版要用台版的譯名）</div>';
+    }
+    document.getElementById('searchKeyword').addEventListener('keydown', e => { if (e.key === 'Enter') runTitleSearch(); });
+
+    function addSearchResult(k) {
+        const platform = document.getElementById('searchPlatform').value;
+        const r = searchList[k];
+        createSource({ platform, seriesId: r.seriesId, name: r.title, lastScanned: parseInt(document.getElementById('searchFrom').value) || 0 });
+        save();
+        runTitleSearch();
+        renderSourceEditors();
     }
 
     function addFromApp(which) {

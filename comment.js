@@ -115,6 +115,47 @@ app.get('/ridi-episodes', async (req, res) => {
     }
 });
 
+// 用標題查作品：Naver、Ridi 用韓文標題，台版 Webtoon 用中文標題
+// 回傳 [{ seriesId, title, author, edition }]；Ridi 只留漫畫（웹툰分類 1600），排除小說
+const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148';
+app.get('/search-series', async (req, res) => {
+    const { platform } = req.query;
+    const keyword = String(req.query.keyword || '').trim();
+    if (!keyword) return res.status(400).send('缺少 keyword');
+    const q = encodeURIComponent(keyword);
+    try {
+        let results = [];
+        if (platform === 'naver') {
+            const r = await fetch(`https://comic.naver.com/api/search/all?keyword=${q}`, { headers: { 'user-agent': MOBILE_UA } });
+            const data = await r.json();
+            results = (data.searchWebtoonResult?.searchViewList || []).map(it => ({
+                seriesId: String(it.titleId), title: it.titleName, author: it.displayAuthor || '',
+            }));
+        } else if (platform === 'ridi') {
+            const r = await fetch(`https://search-api.ridibooks.com/search?keyword=${q}&where=book&site=ridi-store&what=base&adult_exclude=n`, { headers: { 'user-agent': MOBILE_UA } });
+            const data = await r.json();
+            results = (data.books || []).filter(b => b.parent_category === 1600).map(b => ({
+                seriesId: String(b.b_id), title: b.title, author: b.author || '',
+                edition: (b.title.match(/\[(완전판|개정판)\]/) || [])[1] || '',
+            }));
+        } else if (platform === 'webtoon') {
+            const r = await fetch(`https://m.webtoons.com/zh-hant/search/result?keyword=${q}&searchType=WEBTOON&start=1`, {
+                headers: { 'user-agent': MOBILE_UA, referer: 'https://m.webtoons.com/zh-hant/search', 'x-requested-with': 'XMLHttpRequest' },
+            });
+            const data = await r.json();
+            results = (data.result?.webtoonResult?.titleList || []).map(t => ({
+                seriesId: String(t.titleNo), title: t.title,
+                author: [t.writingAuthorName, t.pictureAuthorName].filter(Boolean).join(' / '),
+            }));
+        } else {
+            return res.status(400).send('platform 必須是 naver、ridi 或 webtoon');
+        }
+        res.json(results);
+    } catch (error) {
+        res.status(500).send('搜尋失敗');
+    }
+});
+
 // 讓 Render 或本機環境動態決定連接埠
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
