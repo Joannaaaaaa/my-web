@@ -297,6 +297,7 @@ function latestEpisode(review, today = new Date()) {
 
 // 待補 = 最新話數 − 看到的話數（同一段才算）；無法計算時回傳 null
 function backlogOf(review) {
+    if (review.status === '棄坑') return null; // 不看了，不算待補
     const latest = latestEpisode(review);
     const ep = normalizeEpisode(review.episode);
     if (!latest || !ep) return null;
