@@ -750,6 +750,13 @@ function platformLatest(info, part) {
 // 平台資料的人員 → 表單欄位（原作／글／그림／製作團隊）
 const AUTOFILL_PEOPLE_KEYS = ['author', 'adapter', 'artist', 'studio'];
 
+// 已填的欄位跟平台不一樣：平台有你沒寫的人名才算（你寫得比平台多不算）
+function peopleDiffers(current, names) {
+    const key = n => n.replace(/\s+/g, '').toLowerCase();
+    const mine = new Set(splitNames(String(current || '').replace(/,/g, '、')).map(key));
+    return mine.size > 0 && names.some(n => !mine.has(key(n)));
+}
+
 // ---------- 漫畫表單元件 ----------
 
 /**
@@ -1030,10 +1037,12 @@ function createReviewForm(container, options = {}) {
         const krEl = $('[data-field="krTitle"]');
         if (!krEl.value.trim() && info.title) { krEl.value = cleanPlatformTitle(info.title); filled.push('韓文標題'); }
         let people = 0;
+        const diffs = [];
         AUTOFILL_PEOPLE_KEYS.forEach(key => {
             const el = $(`[data-field="${key}"]`);
             const names = info.people?.[key] || [];
             if (!el.value.trim() && names.length) { el.value = names.join('、'); people += names.length; }
+            else if (names.length && peopleDiffers(el.value, names)) diffs.push({ key, value: names.join('、') });
         });
         if (people) {
             filled.push('創作團隊');
@@ -1073,7 +1082,21 @@ function createReviewForm(container, options = {}) {
         afStatus([
             filled.length ? `✅ 已填入：${filled.join('、')}` : '沒有需要填的欄位（已填的不會被覆蓋）',
             ...notes,
+            ...(diffs.length ? ['⚠️ 下面這些你寫的跟平台不一樣，要換再按：'] : []),
         ].join('\n'), 'ok');
+        // 跟平台不一樣的已填欄位：列出來讓使用者決定要不要換
+        $('[data-role="af-results"]').innerHTML = diffs.map(d => {
+            const job = JOB_KEYS.find(j => j.key === d.key);
+            return `
+                <div class="autofill-diff" data-af-diff="${d.key}">
+                    <div class="autofill-diff-text">
+                        <span class="autofill-diff-label">${escapeHtml(job.label)}（${escapeHtml(job.hint)}）</span>
+                        <span>你寫的：${escapeHtml($(`[data-field="${d.key}"]`).value)}</span>
+                        <span>平台：${escapeHtml(d.value)}</span>
+                    </div>
+                    <button type="button" class="btn autofill-diff-btn" data-af-replace="${d.key}" data-value-new="${escapeHtml(d.value)}">換成平台的</button>
+                </div>`;
+        }).join('');
     }
 
     $('[data-role="af-open"]').addEventListener('click', () => {
@@ -1090,6 +1113,13 @@ function createReviewForm(container, options = {}) {
         if (afBtn) return afRun(afBtn.dataset.afPlatform);
         const pick = e.target.closest('button[data-af-pick]');
         if (pick) return afApply(afPlatform, pick.dataset.afPick);
+        const replace = e.target.closest('button[data-af-replace]');
+        if (replace) {
+            $(`[data-field="${replace.dataset.afReplace}"]`).value = replace.dataset.valueNew;
+            replace.closest('.autofill-diff').remove();
+            container.querySelector('.team-details').open = true;
+            return changed();
+        }
         const toggle = e.target.closest('button[data-toggle="twWebtoon"]');
         if (toggle) {
             state.twWebtoon = !state.twWebtoon;

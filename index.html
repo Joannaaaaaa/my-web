@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-11">
+    <link rel="stylesheet" href="common.css?v=20260926-12">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -364,6 +364,9 @@
         .cleanup-rows .k { color: var(--text-muted); margin-right: 6px; }
         .cleanup-rows .old { color: var(--text-muted); text-decoration: line-through; }
         .cleanup-flag { color: var(--flag-text); }
+        .sync-diff { display: flex; gap: 10px; align-items: flex-start; margin-top: 4px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--flag-text) 12%, transparent); cursor: pointer; }
+        .sync-diff input { width: 18px; height: 18px; margin: 2px 0 0; flex-shrink: 0; accent-color: var(--primary); }
+        .sync-diff-hint { color: var(--text-muted); font-size: 0.8rem; }
         .sync-intro { color: var(--text-sub); font-size: 0.88rem; line-height: 1.7; margin: 0 0 12px; }
         .cleanup-notes { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; }
         .cleanup-notes li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -627,7 +630,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260926-11"></script>
+<script src="common.js?v=20260926-12"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added', view: 'list' }, Store.loadUi());
@@ -1630,7 +1633,7 @@
             <p class="sync-intro">
                 會查 <b>${n}</b> 部有 Naver、Ridi 或 Naver Series 的作品：<br>
                 ・有填作品網址的直接查；沒填的用韓文標題找完全同名的作品，找到會補上網址<br>
-                ・只補空白的欄位：網址、韓文標題、封面、創作團隊、更新日<br>
+                ・只補空白的欄位：網址、韓文標題、封面、創作團隊、更新日；創作團隊跟平台不一樣的會另外列出，勾了才換<br>
                 ・平台最新話數：連載中／休刊／想看的作品才更新，看外傳或後記的會比對那一段<br>
                 查完會先列出變動，勾選後才會套用。第一次要等伺服器醒來，最多約 1 分鐘。
             </p>`;
@@ -1672,11 +1675,15 @@
             next.krTitle = cleanPlatformTitle(info.title);
             rows.push(['韓文標題', next.krTitle]);
         }
+        const diffs = []; // 已填、但平台有你沒寫的人名：列出來讓使用者勾選要不要換
         AUTOFILL_PEOPLE_KEYS.forEach(key => {
             const names = info.people?.[key] || [];
+            const label = JOB_KEYS.find(j => j.key === key).label;
             if (!(r[key] || '').trim() && names.length) {
                 next[key] = names.join('、');
-                rows.push([JOB_KEYS.find(j => j.key === key).label, next[key]]);
+                rows.push([label, next[key]]);
+            } else if (names.length && peopleDiffers(r[key], names)) {
+                diffs.push({ key, label, old: r[key], value: names.join('、') });
             }
         });
         const status = r.status || DEFAULT_STATUS;
@@ -1696,7 +1703,7 @@
         const coverUrl = !r.coverId && info.cover ? info.cover : '';
         if (coverUrl) rows.push(['封面', '下載平台封面']);
         if (info.finished && (status === DEFAULT_STATUS || status === '休刊')) flags.push('平台顯示已完結，要不要改狀態？');
-        return { index, platform, next, rows, flags, coverUrl };
+        return { index, platform, next, rows, flags, coverUrl, diffs };
     }
 
     async function runSync() {
@@ -1728,7 +1735,7 @@
         }));
         if (token !== syncToken) return;
         const order = r => r.target.index;
-        syncPlan = results.filter(x => !x.failed && (x.rows.length || x.flags.length)).sort((a, b) => order(a) - order(b));
+        syncPlan = results.filter(x => !x.failed && (x.rows.length || x.flags.length || x.diffs.length)).sort((a, b) => order(a) - order(b));
         syncFailed = results.filter(x => x.failed).sort((a, b) => order(a) - order(b));
         syncStage = 'review';
         renderSyncReview(results.length);
@@ -1748,6 +1755,13 @@
                         <div class="cleanup-rows">
                             ${p.rows.map(([k2, v, html]) => `<div><span class="k">${escapeHtml(k2)}</span>${html ? v : escapeHtml(v)}</div>`).join('')}
                             ${p.flags.map(f => `<div class="cleanup-flag">⚠️ ${escapeHtml(f)}</div>`).join('')}
+                            ${p.diffs.map((d, j) => `
+                                <label class="sync-diff">
+                                    <input type="checkbox" data-sync-diff="${k}:${j}" onchange="updateSyncButton()">
+                                    <span><span class="k">${escapeHtml(d.label)} 跟平台不一樣</span><br>
+                                        你寫的：${escapeHtml(d.old)}<br>平台：${escapeHtml(d.value)}<br>
+                                        <span class="sync-diff-hint">勾選就換成平台的</span></span>
+                                </label>`).join('')}
                         </div>
                     </div>`;
             }).join('')}
@@ -1759,12 +1773,29 @@
                         <div class="cleanup-rows"><div>${escapeHtml(x.failed)}</div></div>
                     </div>`).join('')}` : ''}`;
         document.getElementById('syncToggleAll').hidden = !syncPlan.some(p => p.rows.length);
+        // 全選／全不選只管一般變動；差異欄位要一個一個決定
         body.scrollTop = 0;
         updateSyncButton();
     }
 
+    // 回傳要套用的 [{ plan, next }]：勾了作品就套用一般變動，另外勾了的差異欄位也換成平台的
     function checkedSyncItems() {
-        return Array.from(document.querySelectorAll('#syncBody input[data-sync]:checked')).map(el => syncPlan[el.dataset.sync]);
+        const byPlan = new Map();
+        const entry = k => {
+            if (!byPlan.has(k)) byPlan.set(k, { ...syncPlan[k], next: {}, coverUrl: '' });
+            return byPlan.get(k);
+        };
+        document.querySelectorAll('#syncBody input[data-sync]:checked').forEach(el => {
+            const item = entry(Number(el.dataset.sync));
+            Object.assign(item.next, syncPlan[el.dataset.sync].next);
+            item.coverUrl = syncPlan[el.dataset.sync].coverUrl;
+        });
+        document.querySelectorAll('#syncBody input[data-sync-diff]:checked').forEach(el => {
+            const [k, j] = el.dataset.syncDiff.split(':').map(Number);
+            const d = syncPlan[k].diffs[j];
+            entry(k).next[d.key] = d.value;
+        });
+        return [...byPlan.values()];
     }
 
     function updateSyncButton() {
