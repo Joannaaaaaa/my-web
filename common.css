@@ -188,6 +188,9 @@ input[type="date"].input { -webkit-appearance: none; appearance: none; }
 }
 .chip-day { min-width: 44px; padding: 0; }
 
+.tw-toggle { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.tw-toggle .chip { flex-shrink: 0; }
+.tw-toggle .input { min-height: 40px; padding: 8px 12px; }
 .link-fields { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .link-field { display: flex; align-items: center; gap: 8px; }
 .link-field .swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }

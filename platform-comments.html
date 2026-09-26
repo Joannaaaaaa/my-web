@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-6">
+    <link rel="stylesheet" href="common.css?v=20260926-7">
     <style>
         body { padding-bottom: calc(24px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -143,39 +143,9 @@
     <div class="form-hint">每次更新會從「已掃到」的下一話開始，往後找幾話有沒有你的留言；還沒出的話數會自動停下。</div>
 
     <h4>從 App 加入</h4>
+    <div class="form-hint" style="margin-bottom:8px;">在 App 作品編輯頁勾選 Naver／Ridi，或打開「台版 Webtoon」標記，就會出現在這裡。</div>
     <div id="appCandidates"></div>
     <div id="appLookup" style="margin-top:8px;"></div>
-
-    <h4>用標題搜尋</h4>
-    <div style="display:flex; gap:8px;">
-        <select class="input" id="searchPlatform" style="max-width:130px;">
-            <option value="naver">Naver</option>
-            <option value="ridi">Ridi</option>
-            <option value="webtoon">台版 Webtoon</option>
-        </select>
-        <input class="input" id="searchKeyword" placeholder="韓文標題（台版用中文）" enterkeyhint="search">
-    </div>
-    <div style="display:flex; gap:8px; margin-top:8px;">
-        <input class="input" id="searchFrom" inputmode="numeric" placeholder="已看到第幾話（選填）">
-        <button class="btn btn-primary" style="flex-shrink:0;" onclick="runTitleSearch()">搜尋</button>
-    </div>
-    <div class="form-hint">Naver、Ridi 用韓文標題；台版 Webtoon 用台版的中文譯名。Ridi 只會列出漫畫。</div>
-    <div id="searchResults"></div>
-
-    <h4>貼網址新增</h4>
-    <input class="input" id="addUrl" placeholder="貼上作品網址（Webtoon、Naver、Ridi）" inputmode="url" autocapitalize="off" autocorrect="off">
-    <div class="detect" id="addDetect"></div>
-    <div class="form-row" style="margin-top:8px;">
-        <input class="input" id="addName" placeholder="顯示名稱">
-        <input class="input" id="addFrom" inputmode="numeric" placeholder="已看到第幾話">
-    </div>
-    <div class="form-hint">會從「已看到」的下一話開始自動找；想找以前的留言，之後可以用「補掃」。</div>
-    <button class="btn btn-primary" style="width:100%; margin-top:8px;" onclick="addSourceFromForm()">新增</button>
-
-    <h4>匯入舊的 JSON</h4>
-    <button class="btn" style="width:100%;" onclick="document.getElementById('importPicker').click()">📤 選擇 database.json／queue.json</button>
-    <input type="file" id="importPicker" accept=".json,application/json" multiple hidden>
-    <div class="form-hint">可以一次選兩個檔案。作品清單和已知留言的話數會併入，重複的不會重複加。</div>
 
     <h4>追蹤中的作品</h4>
     <div id="sourceEditors"></div>
@@ -185,7 +155,7 @@
     <div class="form-hint">平常更新只重新檢查 90 天內的留言；這個會檢查全部，比較久。</div>
 </div>
 
-<script src="common.js?v=20260926-6"></script>
+<script src="common.js?v=20260926-7"></script>
 <script>
     // 瀏覽器不能直接呼叫各平台的 API（沒開 CORS、需要特殊標頭），所以透過 comment.js 伺服器轉發
     const API_BASE_URL = window.location.protocol === 'https:'
@@ -433,7 +403,7 @@
         if (running) return;
         const errors = [];
         const sources = only ? tracker.sources.filter(s => s.id === only) : tracker.sources;
-        if (!sources.length) return alert('還沒有追蹤的作品，先到右上角 ⚙ 新增或匯入');
+        if (!sources.length) return alert('還沒有追蹤的作品，先到右上角 ⚙「從 App 加入」');
         running = true;
         cancelled = false;
         document.getElementById('runBtn').disabled = true;
@@ -577,7 +547,7 @@
 
         if (!tracker.sources.length) {
             document.getElementById('sources').innerHTML = `
-                <div class="empty">還沒有追蹤的作品<br>按右上角 ⚙：填帳號名稱、貼作品網址，<br>或直接匯入以前的 database.json／queue.json</div>`;
+                <div class="empty">還沒有追蹤的作品<br>先在 App 的作品編輯頁勾選 Naver／Ridi<br>或打開「台版 Webtoon」標記，<br>再到右上角 ⚙「從 App 加入」</div>`;
             return;
         }
         // 有新回覆的排前面，其次是最近有留言的
@@ -643,28 +613,6 @@
         if (n >= 1 && n <= 20) { tracker.newPerRun = n; save(); }
     });
 
-    const addUrl = document.getElementById('addUrl');
-    addUrl.addEventListener('input', () => {
-        const p = parseSourceUrl(addUrl.value);
-        const box = document.getElementById('addDetect');
-        box.className = 'detect' + (p ? ' ok' : '');
-        box.textContent = !addUrl.value.trim() ? '' : p ? `✓ ${PLATFORM_INFO[p.platform].label}，作品編號 ${p.seriesId}` : '認不出這個網址，請貼 Webtoon、Naver 或 Ridi 的作品網址';
-    });
-
-    function addSourceFromForm() {
-        const p = parseSourceUrl(addUrl.value);
-        if (!p) return alert('認不出這個網址');
-        if (findSource(p.platform, p.seriesId)) return alert('這部已經在追蹤了');
-        const from = parseInt(document.getElementById('addFrom').value) || 0;
-        createSource({ ...p, name: document.getElementById('addName').value.trim(), url: addUrl.value.trim(), lastScanned: from });
-        save();
-        addUrl.value = '';
-        document.getElementById('addName').value = '';
-        document.getElementById('addFrom').value = '';
-        document.getElementById('addDetect').textContent = '';
-        renderSourceEditors();
-    }
-
     // ---------- 從 App 加入 ----------
     // App 裡有填 Naver／Ridi 作品網址、還沒追蹤的作品（Kakao、Bomtoon 沒有留言抓取功能）
     const APP_PLATFORM_KEYS = { Naver: 'naver', Ridibooks: 'ridi' };
@@ -725,16 +673,21 @@
         return { match: exact.length === 1 ? exact[0] : null, options: exact.length ? exact : results.slice(0, 5) };
     }
 
-    // App 裡有 Naver／Ridi 平台、有韓文標題、但沒填網址也還沒追蹤的作品
+    // 要用標題查的作品：
+    // - Naver／Ridi：App 有勾這個平台、有韓文標題、沒填網址
+    // - 台版 Webtoon：App 有「台版 Webtoon」標記，用台版譯名（沒填就用標題）
     function appLookupTargets() {
         const out = [];
+        const tracked = (platform, titles) => tracker.sources.some(s => s.platform === platform && titles.some(t => sameTitle(t, s.name)));
         Store.loadReviews().forEach(r => {
-            if (!r.krTitle) return;
             Object.entries(APP_PLATFORM_KEYS).forEach(([appKey, platform]) => {
-                if (!(r.platforms || []).includes(appKey) || parseSourceUrl((r.links || {})[appKey])) return;
-                if (tracker.sources.some(s => s.platform === platform && [r.krTitle, r.title].some(t => sameTitle(t, s.name)))) return;
-                out.push({ platform, review: r });
+                if (!r.krTitle || !(r.platforms || []).includes(appKey) || parseSourceUrl((r.links || {})[appKey])) return;
+                if (tracked(platform, [r.krTitle, r.title])) return;
+                out.push({ platform, review: r, keyword: r.krTitle });
             });
+            if (r.twWebtoon && !tracked('webtoon', [twWebtoonTitle(r), r.title])) {
+                out.push({ platform: 'webtoon', review: r, keyword: twWebtoonTitle(r) });
+            }
         });
         return out;
     }
@@ -742,12 +695,15 @@
     let lookupResults = null; // [{ platform, review, status, match, options }]
     let lookupRunning = false;
 
+    const twInput = k => `<input class="input" id="twFrom-${k}" inputmode="numeric" placeholder="台版看到第幾話" aria-label="台版看到第幾話"
+        style="min-height:34px; padding:4px 8px; font-size:0.8rem; width:72px; flex-shrink:0; text-align:center;">`;
+
     function renderAppLookup() {
         const box = document.getElementById('appLookup');
         const targets = appLookupTargets();
         if (!lookupResults) {
             box.innerHTML = targets.length
-                ? `<button class="btn" style="width:100%;" onclick="runAppLookup()">🔍 用韓文標題查其他 ${targets.length} 部（沒填網址的）</button>`
+                ? `<button class="btn" style="width:100%;" onclick="runAppLookup()">🔍 用標題查其他 ${targets.length} 部（沒填網址的、台版）</button>`
                 : '';
             return;
         }
@@ -759,15 +715,17 @@
             if (x.status === 'pending') right = '<span class="detect">查詢中…</span>';
             else if (x.status === 'none') right = '<span class="detect">查不到</span>';
             else if (x.status === 'error') right = '<span class="detect" style="color: var(--danger);">查詢失敗</span>';
-            else if (x.status === 'match') right = `<button class="btn btn-primary" style="min-height:34px; padding:0 12px; font-size:0.8rem;" onclick="addLookup(${lookupResults.indexOf(x)})">加入</button>`;
+            else if (x.status === 'match') right = `${x.platform === 'webtoon' ? twInput(lookupResults.indexOf(x)) : ''}<button class="btn btn-primary" style="min-height:34px; padding:0 12px; font-size:0.8rem;" onclick="addLookup(${lookupResults.indexOf(x)})">加入</button>`;
             else right = `
                 <select class="input" id="lookupPick-${lookupResults.indexOf(x)}" style="min-height:34px; padding:4px 8px; font-size:0.8rem; max-width:150px;">
                     ${x.options.map((o, i) => `<option value="${i}">${escapeHtml(o.title)}${o.author ? `（${escapeHtml(o.author)}）` : ''}</option>`).join('')}
                 </select>
+                ${x.platform === 'webtoon' ? twInput(lookupResults.indexOf(x)) : ''}
                 <button class="btn btn-primary" style="min-height:34px; padding:0 12px; font-size:0.8rem;" onclick="addLookup(${lookupResults.indexOf(x)}, true)">加入</button>`;
             const sub = x.status === 'match'
                 ? `由標題查到：${escapeHtml(x.match.title)}${x.match.author ? ` · ${escapeHtml(x.match.author)}` : ''}`
-                : x.status === 'choose' ? '有好幾個結果，請選一個' : escapeHtml(x.review.krTitle);
+                : x.status === 'choose' ? '有好幾個結果，請選一個'
+                : x.status === 'none' && x.platform === 'webtoon' ? `查不到「${escapeHtml(x.keyword)}」，可在 App 填台版譯名` : escapeHtml(x.keyword);
             return `
                 <div class="src-edit" style="display:flex; align-items:center; gap:8px; ${['none', 'error'].includes(x.status) ? 'opacity:0.6;' : ''}">
                     <span class="tag" style="--tag-color: ${info.color}">${info.label}</span>
@@ -779,7 +737,7 @@
                 </div>`;
         }).join('') || '<div class="form-hint">查到的都已經加入了</div>';
         const matches = lookupResults.filter(x => x.status === 'match').length;
-        if (matches > 1 && !lookupRunning) box.innerHTML += `<button class="btn" style="width:100%;" onclick="addAllLookup()">加入全部對上的（${matches} 部）</button>`;
+        if (matches > 1 && !lookupRunning) box.innerHTML += `<button class="btn" style="width:100%;" onclick="addAllLookup()">加入全部對上的（台版要先填看到第幾話）</button>`;
     }
 
     async function runAppLookup() {
@@ -789,8 +747,8 @@
         renderAppLookup();
         for (const x of lookupResults) {
             try {
-                const results = await searchSeries(x.platform, x.review.krTitle);
-                const { match, options } = pickMatch(x.platform, results, x.review.krTitle);
+                const results = await searchSeries(x.platform, x.keyword);
+                const { match, options } = pickMatch(x.platform, results, x.keyword);
                 if (match && findSource(x.platform, match.seriesId)) x.status = 'tracked';
                 else if (match) Object.assign(x, { status: 'match', match, options });
                 else if (options.length) Object.assign(x, { status: 'choose', options });
@@ -805,71 +763,47 @@
         renderAppLookup();
     }
 
-    function lookupSource(x, series) {
-        const ep = normalizeEpisode(x.review.episode)?.main || 0;
+    // 韓版：App 記的就是看到的話數。台版：App 沒記台版進度，而且台版有付費搶先看（快讀），
+    // 最新話數常常比使用者看到的多，所以請使用者填「台版看到第幾話」，從下一話開始找
+    function lookupSource(x, series, twProgress) {
+        const appEp = normalizeEpisode(x.review.episode)?.main || 0;
+        const lastScanned = x.platform === 'webtoon' ? twProgress : Math.max(0, appEp - tracker.newPerRun);
         return createSource({
-            platform: x.platform, seriesId: series.seriesId, name: cleanTitleBrackets(x.review.title) || series.title,
-            lastScanned: Math.max(0, ep - tracker.newPerRun),
+            platform: x.platform, seriesId: series.seriesId,
+            name: x.platform === 'webtoon' ? series.title : (cleanTitleBrackets(x.review.title) || series.title),
+            lastScanned,
         });
+    }
+
+    function twProgressOf(k) {
+        const v = document.getElementById(`twFrom-${k}`)?.value.trim();
+        return /^\d+$/.test(v || '') ? Number(v) : null;
     }
 
     function addLookup(k, fromSelect = false) {
         const x = lookupResults[k];
         const series = fromSelect ? x.options[Number(document.getElementById(`lookupPick-${k}`).value)] : x.match;
         if (findSource(x.platform, series.seriesId)) return alert('這部已經在追蹤了');
-        lookupSource(x, series);
+        const tw = twProgressOf(k);
+        if (x.platform === 'webtoon' && tw === null) return alert('請先填台版看到第幾話');
+        lookupSource(x, series, tw);
         x.status = 'added';
         save();
         renderAppLookup();
         renderSourceEditors();
     }
 
+    // 韓版對上的全部加入；台版有填進度的才加入
     function addAllLookup() {
-        lookupResults.filter(x => x.status === 'match' && !findSource(x.platform, x.match.seriesId)).forEach(x => {
-            lookupSource(x, x.match);
+        lookupResults.forEach((x, k) => {
+            if (x.status !== 'match' || findSource(x.platform, x.match.seriesId)) return;
+            const tw = twProgressOf(k);
+            if (x.platform === 'webtoon' && tw === null) return;
+            lookupSource(x, x.match, tw);
             x.status = 'added';
         });
         save();
         renderAppLookup();
-        renderSourceEditors();
-    }
-
-    // 手動用標題搜尋（台版 Webtoon 也可以）
-    let searchList = [];
-    async function runTitleSearch() {
-        const platform = document.getElementById('searchPlatform').value;
-        const keyword = document.getElementById('searchKeyword').value.trim();
-        const box = document.getElementById('searchResults');
-        if (!keyword) return;
-        box.innerHTML = '<div class="detect">搜尋中…</div>';
-        try {
-            const results = await searchSeries(platform, keyword);
-            // Ridi 同名有完整版時排在前面
-            searchList = results.sort((a, b) => (b.edition === '완전판') - (a.edition === '완전판')).slice(0, 10);
-        } catch (err) {
-            box.innerHTML = `<div class="detect" style="color: var(--danger);">搜尋失敗：${escapeHtml(err.message === 'Failed to fetch' ? '連不上伺服器' : err.status === 404 ? '伺服器還沒更新（需要 push 讓 Render 重新部署）' : err.message)}</div>`;
-            return;
-        }
-        box.innerHTML = searchList.length ? searchList.map((r, k) => {
-            const tracked = findSource(platform, r.seriesId);
-            return `
-                <div class="src-edit" style="display:flex; align-items:center; gap:8px; margin-top:8px;">
-                    <div style="flex:1; min-width:0;">
-                        <div>${escapeHtml(r.title)}</div>
-                        <div class="detect" style="margin:0;">${escapeHtml(r.author || '')}</div>
-                    </div>
-                    ${tracked ? '<span class="detect">已追蹤</span>' : `<button class="btn btn-primary" style="min-height:34px; padding:0 12px; font-size:0.8rem;" onclick="addSearchResult(${k})">加入</button>`}
-                </div>`;
-        }).join('') : '<div class="detect">查不到，換個寫法試試（台版要用台版的譯名）</div>';
-    }
-    document.getElementById('searchKeyword').addEventListener('keydown', e => { if (e.key === 'Enter') runTitleSearch(); });
-
-    function addSearchResult(k) {
-        const platform = document.getElementById('searchPlatform').value;
-        const r = searchList[k];
-        createSource({ platform, seriesId: r.seriesId, name: r.title, lastScanned: parseInt(document.getElementById('searchFrom').value) || 0 });
-        save();
-        runTitleSearch();
         renderSourceEditors();
     }
 
@@ -910,54 +844,6 @@
         save();
         renderSourceEditors();
     }
-
-    // 匯入以前手動維護的 database.json（作品清單）與 queue.json（有留言的話數）
-    function importLegacy(items) {
-        let added = 0, episodes = 0;
-        const withUrl = items.filter(it => it.url), queue = items.filter(it => it.id && it.volume);
-        withUrl.forEach(it => {
-            const p = parseSourceUrl(it.url);
-            if (!p || findSource(p.platform, p.seriesId)) return;
-            createSource({ ...p, name: it.title, url: it.url });
-            added++;
-        });
-        queue.forEach(it => {
-            const platform = it.platform;
-            if (!PLATFORM_INFO[platform]) return;
-            let source;
-            if (platform === 'ridi') {
-                source = tracker.sources.find(s => s.platform === 'ridi' && (s.name === it.title || s.ridiMap?.[it.volume] === String(it.id)))
-                    || createSource({ platform, seriesId: String(it.id), name: it.title });
-                source.ridiMap = { ...source.ridiMap, [it.volume]: String(it.id) };
-            } else {
-                const m = String(it.id).match(platform === 'naver' ? /^webtoon_(\d+)_\d+$/ : /^w_(\d+)_\d+$/);
-                if (!m) return;
-                source = findSource(platform, m[1]) || createSource({ platform, seriesId: m[1], name: it.title });
-            }
-            if (!source.episodes[it.volume]) { source.episodes[it.volume] = { pending: true, comments: [] }; episodes++; }
-            source.lastScanned = Math.max(source.lastScanned || 0, Number(it.volume));
-            if (it.targetName && !tracker.usernames[platform]) tracker.usernames[platform] = it.targetName;
-        });
-        save();
-        return { added, episodes };
-    }
-
-    document.getElementById('importPicker').addEventListener('change', async e => {
-        const files = Array.from(e.target.files);
-        e.target.value = '';
-        const items = [];
-        for (const f of files) {
-            try {
-                const data = JSON.parse(await f.text());
-                items.push(...(Array.isArray(data) ? data : [data]));
-            } catch (err) {
-                alert(`「${f.name}」不是有效的 JSON`);
-            }
-        }
-        const { added, episodes } = importLegacy(items);
-        alert(`匯入完成：新增 ${added} 部作品、${episodes} 個已知留言的話數。\n按「更新留言」就會開始抓。`);
-        openSettings();
-    });
 
     render();
     wakeServer();

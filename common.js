@@ -85,7 +85,19 @@ function platformLinkTagsHtml(review) {
         if (!link) return `<span class="tag" style="--tag-color: ${platformColor(p)}">${escapeHtml(p)}</span>`;
         return `<a class="tag tag-link" style="--tag-color: ${platformColor(p)}" href="${escapeHtml(link.url)}" target="_blank" rel="noopener"
             onclick="event.stopPropagation()" title="${link.isSearch ? '在平台上搜尋' : '打開作品頁'}">${escapeHtml(p)} ${link.isSearch ? '🔍' : '↗'}</a>`;
-    }).join(' ');
+    }).join(' ') + twWebtoonTagHtml(review);
+}
+
+// 台版 Webtoon 標記（不是發行平台，不算進平台統計）：點了到台版用譯名搜尋
+const TW_WEBTOON_COLOR = '#00d564';
+function twWebtoonTitle(review) {
+    return (review.twTitle || '').trim() || cleanTitleBrackets(review.title);
+}
+function twWebtoonTagHtml(review) {
+    if (!review.twWebtoon) return '';
+    const url = `https://www.webtoons.com/zh-hant/search?keyword=${encodeURIComponent(twWebtoonTitle(review))}`;
+    return ` <a class="tag tag-link" style="--tag-color: ${TW_WEBTOON_COLOR}" href="${escapeHtml(url)}" target="_blank" rel="noopener"
+        onclick="event.stopPropagation()" title="在台版 Webtoon 搜尋">台版 🔍</a>`;
 }
 
 // ---------- 日期 ----------
@@ -646,7 +658,7 @@ if (typeof window !== 'undefined' && window.matchMedia) {
  * options.onInput：任何欄位改動時呼叫；options.teamOpen：創作團隊區塊預設展開。
  */
 function createReviewForm(container, options = {}) {
-    const state = { status: DEFAULT_STATUS, updateDay: '', platforms: [], rating: 0, coverId: '' };
+    const state = { status: DEFAULT_STATUS, updateDay: '', platforms: [], rating: 0, coverId: '', twWebtoon: false };
     let cleanSnapshot = '';
     // 回歸時間換算後就固定下來；文字沒改就沿用原本的區間，避免過一陣子再存時「春天」被改算成明年
     let returnOrig = { text: '', from: '', to: '' };
@@ -726,6 +738,10 @@ function createReviewForm(container, options = {}) {
                     </div>`).join('')}
             </div>
             <div class="form-hint">沒填網址時，點平台標籤會用韓文標題在該平台搜尋</div>
+            <div class="tw-toggle">
+                <button type="button" class="chip" data-toggle="twWebtoon" style="--opt-color: ${TW_WEBTOON_COLOR}">台版 Webtoon</button>
+                <input class="input" data-field="twTitle" data-role="tw-title" placeholder="台版譯名（跟標題不同才填）">
+            </div>
         </div>
         <div class="form-section">
             <label class="form-label">評分</label>
@@ -780,6 +796,8 @@ function createReviewForm(container, options = {}) {
         });
         $('[data-role="rating-number"]').textContent = state.rating ? state.rating : '';
         container.querySelectorAll('[data-link-row]').forEach(row => { row.hidden = !state.platforms.includes(row.dataset.linkRow); });
+        $('[data-toggle="twWebtoon"]').classList.toggle('selected', state.twWebtoon);
+        $('[data-role="tw-title"]').hidden = !state.twWebtoon;
         $('[data-role="day-section"]').style.display = state.status === DEFAULT_STATUS ? '' : 'none';
         $('[data-role="return-section"]').style.display = state.status === '休刊' ? '' : 'none';
         const ret = currentReturn();
@@ -835,6 +853,12 @@ function createReviewForm(container, options = {}) {
     $('[data-field="title"]').addEventListener('input', () => { if (!state.coverId) refreshCover(); });
 
     container.addEventListener('click', e => {
+        const toggle = e.target.closest('button[data-toggle="twWebtoon"]');
+        if (toggle) {
+            state.twWebtoon = !state.twWebtoon;
+            changed();
+            return;
+        }
         const btn = e.target.closest('button[data-value]');
         if (!btn) return;
         const group = btn.closest('[data-group]').dataset.group;
@@ -885,6 +909,8 @@ function createReviewForm(container, options = {}) {
             platforms: [...state.platforms],
             rating: state.rating,
             coverId: state.coverId,
+            twWebtoon: state.twWebtoon,
+            twTitle: state.twWebtoon ? data.twTitle.trim() : '',
         };
     }
 
@@ -900,6 +926,7 @@ function createReviewForm(container, options = {}) {
         state.platforms = [...(data.platforms || [])];
         state.rating = ratingValue(data.rating);
         state.coverId = data.coverId || '';
+        state.twWebtoon = !!data.twWebtoon;
         refreshCover();
         refreshChips();
         markClean();

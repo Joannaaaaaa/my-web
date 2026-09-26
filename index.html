@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-6">
+    <link rel="stylesheet" href="common.css?v=20260926-7">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -610,7 +610,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260926-6"></script>
+<script src="common.js?v=20260926-7"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added', view: 'list' }, Store.loadUi());
@@ -1349,6 +1349,10 @@
                 <span class="swatch" style="background: ${platformColor(p)}"></span>
                 ${escapeHtml(PLATFORM_CONFIG[p]?.short || p)}<span class="open-link-icon">${link.isSearch ? '🔍' : '↗'}</span></a>`;
         }).join('');
+        const twLink = r.twWebtoon
+            ? `<a class="open-link" href="${escapeHtml(`https://www.webtoons.com/zh-hant/search?keyword=${encodeURIComponent(twWebtoonTitle(r))}`)}" target="_blank" rel="noopener" aria-label="在台版 Webtoon 搜尋">
+                <span class="swatch" style="background: ${TW_WEBTOON_COLOR}"></span>台版<span class="open-link-icon">🔍</span></a>`
+            : '';
 
         document.getElementById('detailHeaderTitle').textContent = r.title || '未命名';
         document.getElementById('viewModeArea').innerHTML = `
@@ -1359,7 +1363,7 @@
                     ${r.krTitle ? `<div class="detail-kr">원제: ${escapeHtml(r.krTitle)}</div>` : ''}
                     ${r.note ? `<div class="item-note" style="font-size:0.85rem;">📌 ${escapeHtml(r.note)}</div>` : ''}
                     <div class="detail-meta">${statusBadgeHtml(r)} ${openLinks ? '' : platformTagsHtml(r.platforms)}</div>
-                    ${openLinks ? `<div class="open-links">${openLinks}</div>` : ''}
+                    ${openLinks || twLink ? `<div class="open-links">${openLinks}${twLink}</div>` : ''}
                     <div class="detail-progress">${progressControlsHtml(r, index)}</div>
                 </div>
             </div>
