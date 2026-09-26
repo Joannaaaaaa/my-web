@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260927-5">
+    <link rel="stylesheet" href="common.css?v=20260927-6">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -132,7 +132,9 @@
         .day-item-main { flex: 1; min-width: 0; }
         .day-item-title { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .day-item-kr { font-size: 0.8rem; color: var(--text-kr); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .day-item-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; flex-shrink: 0; max-width: 45%; }
+        /* 平台標籤放在標題下面一整行（放右邊時兩個標籤會把話數、按鈕擠到換行） */
+        .day-item-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+        .day-item-links .tag { font-size: 0.75rem; }
         .read-pill {
             min-height: 30px; padding: 0 10px; border-radius: 15px; border: 1px solid var(--border-strong);
             background: transparent; color: var(--text-muted); font-size: 0.78rem; font-weight: bold; cursor: pointer; position: relative;
@@ -666,7 +668,7 @@
             <div class="help-body">
                 <ul>
                     <li>依日期分組、新的在上面；點一筆會打開那部作品（已刪除的作品點不開）。</li>
-                    <li><b>平台動態</b>：每天自動檢查、「更新平台資料」找到的變化 — 出了新話數、休刊回歸、平台完結。新話數是跟上次從平台查到的數字比，每週 +1 的推算不算。</li>
+                    <li><b>平台動態</b>：每天自動檢查、「更新平台資料」找到的變化 — 出了新話數、第一次記錄最新話數、數字修正、休刊回歸、平台完結。都是跟上次從平台查到（或你填）的數字比，每週 +1 的推算被校正不算。自動檢查寫的「N 部最新話數有更新」就是這裡的新話數紀錄。</li>
                     <li><b>我的紀錄</b>：看到第幾話（同一部同一天合併成一筆，例如 40話 → 43話）、本週已讀、狀態、評分、寫筆記、新增／刪除作品。</li>
                     <li>保留 2 年（最多 5000 筆），會一起放進備份檔。從這個功能加入之後才開始記錄，以前的沒辦法補。</li>
                 </ul>
@@ -823,7 +825,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260927-5"></script>
+<script src="common.js?v=20260927-6"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added', view: 'list' }, Store.loadUi());
@@ -1120,11 +1122,11 @@
                     <div class="title-line"><div class="day-item-title">${escapeHtml(cleanTitleBrackets(r.title) || '未命名')}</div>${episodeBadgeHtml(r)}</div>
                     ${r.krTitle ? `<div class="day-item-kr">${escapeHtml(r.krTitle)}</div>` : ''}
                     ${r.note ? `<div class="item-note">📌 ${escapeHtml(r.note)}</div>` : ''}
+                    <div class="day-item-links">${platformLinkTagsHtml(r)}</div>
                     <div class="day-item-progress">${progressControlsHtml(r, i)}
                         <button class="read-pill ${read ? 'on' : ''}" onclick="event.stopPropagation(); toggleRead(${i})" aria-pressed="${read}">✓ 已讀</button>
                     </div>
                 </div>
-                <div class="day-item-links">${platformLinkTagsHtml(r)}</div>
             </div>`;
         }).join('')
             : `<div class="day-empty">${DAY_ZH[selectedDay]}沒有連載中的作品</div>`;
@@ -2289,7 +2291,11 @@
         const partLabel = EPISODE_PARTS.find(p => p.key === e.part)?.label || '';
         const stars = n => (n ? `${n}★` : '無');
         switch (e.type) {
-            case 'episode': return `最新${e.part && e.part !== 'main' ? partLabel : '話數'} ${e.from} → ${e.to} 話`;
+            case 'episode': {
+                const what = `最新${e.part && e.part !== 'main' ? partLabel : '話數'}`;
+                if (e.from == null) return `記錄${what} ${e.to} 話`;
+                return e.to < e.from ? `${what}修正 ${e.from} → ${e.to} 話` : `${what} ${e.from} → ${e.to} 話`;
+            }
             case 'resumed': return '平台出了新的一話，已改回連載中';
             case 'finished': return '平台完結，已改成完結';
             case 'added': return '新增作品';
@@ -2471,11 +2477,20 @@
     // 休刊的作品：平台上出了比休刊前更新的一話 → 回歸了（休刊期間最新話數不會自動 +1，所以可以直接比）
     // 沒有記錄休刊前的最新話數就無法判斷，不改
     // 平台動態：比較套用前後，記下新話數（跟上次平台上的數字比，不是每週 +1 的推算）、完結、回歸
+    // 上次記錄的「平台數字」（不含每週 +1 的推算）；段落不同或沒記錄過是 null
+    function recordedLatest(r, part) {
+        return r.latest && (r.latest.part || 'main') === part && Number.isInteger(r.latest.n) ? r.latest.n : null;
+    }
+
+    // 平台上的最新話數跟上次記錄的不一樣（新的一話、第一次記錄、修正）；每週 +1 推算被校正不算
+    function latestChanged(r, n, part) {
+        return !!n && recordedLatest(r, part) !== n;
+    }
+
     function logPlatformChanges(before, next) {
         const after = { ...before, ...next };
-        const old = before.latest;
-        if (next.latest && old && old.part === next.latest.part && next.latest.n > old.n) {
-            ActivityLog.add('platform', 'episode', after, { part: next.latest.part, from: old.n, to: next.latest.n });
+        if (next.latest && latestChanged(before, next.latest.n, next.latest.part)) {
+            ActivityLog.add('platform', 'episode', after, { part: next.latest.part, from: recordedLatest(before, next.latest.part), to: next.latest.n });
         }
         if (next.status === '完結' && before.status !== '完結') ActivityLog.add('platform', 'finished', after);
         if (next.status === DEFAULT_STATUS && before.status === '休刊') ActivityLog.add('platform', 'resumed', after);
@@ -2536,8 +2551,8 @@
             const old = latestEpisode(r);
             const next = {};
             if (n && (!old || old.part !== part.key || old.n !== n)) {
-                next.latest = { n, part: part.key, asOf: today };
-                updated++;
+                next.latest = { n, part: part.key, asOf: today }; // 推算值不對也要校正（從今天重新算 +1）
+                if (latestChanged(r, n, part.key)) updated++;     // 但只有平台數字真的變了才算「有更新」，跟動態紀錄一致
             }
             if (info.finished && AUTO_FINISH_FROM.includes(r.status || DEFAULT_STATUS)) {
                 Object.assign(next, { status: '完結', returnText: '', returnFrom: '', returnTo: '' });
