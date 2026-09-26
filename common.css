@@ -280,3 +280,17 @@ a.tag-link:active { background: var(--raised); }
 .server-pill.ok { color: var(--status-ongoing); }
 .server-pill.bad { color: var(--danger); }
 .server-pill.busy { color: var(--primary); background: color-mix(in srgb, var(--primary) 16%, transparent); }
+
+/* 底部分頁列（主頁、平台留言頁共用） */
+.tab-bar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    display: flex; background: var(--bar-bg); border-top: 1px solid var(--border);
+    padding-bottom: var(--safe-bottom);
+}
+.tab-bar button {
+    flex: 1; height: 56px; border: none; background: none; color: var(--text-muted); cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 0.72rem;
+}
+.tab-bar button .tab-icon { font-size: 1.25rem; line-height: 1; filter: grayscale(1); opacity: 0.6; }
+.tab-bar button.active { color: var(--primary); font-weight: bold; }
+.tab-bar button.active .tab-icon { filter: none; opacity: 1; }

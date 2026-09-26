@@ -18,9 +18,9 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-19">
+    <link rel="stylesheet" href="common.css?v=20260926-20">
     <style>
-        body { padding-bottom: calc(24px + var(--safe-bottom)); }
+        body { padding-bottom: calc(80px + var(--safe-bottom)); } /* 留空間給底部分頁列 */
         body.no-scroll { overflow: hidden; }
         .topbar {
             position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 4px;
@@ -118,7 +118,6 @@
 <body>
 
 <header class="topbar">
-    <a class="icon-btn" href="index.html" aria-label="返回" style="text-decoration:none; font-size:2.2rem;">‹</a>
     <h1>平台留言</h1>
     <span class="server-pill" id="serverPill">連線中…</span>
     <button class="icon-btn" onclick="openHelp()" aria-label="使用說明" style="font-size:1.1rem; font-weight:bold;">？</button>
@@ -135,6 +134,15 @@
     <div class="run-errors" id="runErrors" hidden></div>
     <div id="sources"></div>
 </main>
+
+<!-- 底部分頁（跟主頁一樣；其他分頁回到主頁） -->
+<nav class="tab-bar">
+    <button onclick="location.href = 'index.html?tab=list'"><span class="tab-icon">📚</span>作品</button>
+    <button onclick="location.href = 'index.html?tab=weekly'"><span class="tab-icon">📅</span>本週</button>
+    <button onclick="location.href = 'index.html?tab=activity'"><span class="tab-icon">🕘</span>動態</button>
+    <button class="active"><span class="tab-icon">💬</span>留言</button>
+    <button onclick="location.href = 'index.html?tab=stats'"><span class="tab-icon">📊</span>統計</button>
+</nav>
 
 <div class="backdrop" id="settingsBackdrop" hidden onclick="closeSettings(); closeHelp();"></div>
 <div class="sheet help" id="helpSheet" hidden>
@@ -275,7 +283,7 @@
     <div class="form-hint">平常更新只重新檢查 90 天內的留言；這個會檢查全部，比較久。</div>
 </div>
 
-<script src="common.js?v=20260926-19"></script>
+<script src="common.js?v=20260926-20"></script>
 <script>
     // API_BASE_URL 在 common.js
     const PLATFORM_INFO = {

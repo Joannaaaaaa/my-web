@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-19">
+    <link rel="stylesheet" href="common.css?v=20260926-20">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -264,19 +264,7 @@
         .stats-table .zero { color: var(--text-faint); }
         .stats-table .total-row td { background: var(--raised); font-weight: bold; }
 
-        /* 底部分頁列與新增按鈕 */
-        .tab-bar {
-            position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-            display: flex; background: var(--bar-bg); border-top: 1px solid var(--border);
-            padding-bottom: var(--safe-bottom);
-        }
-        .tab-bar button {
-            flex: 1; height: 56px; border: none; background: none; color: var(--text-muted); cursor: pointer;
-            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 0.72rem;
-        }
-        .tab-bar button .tab-icon { font-size: 1.25rem; line-height: 1; filter: grayscale(1); opacity: 0.6; }
-        .tab-bar button.active { color: var(--primary); font-weight: bold; }
-        .tab-bar button.active .tab-icon { filter: none; opacity: 1; }
+        /* 底部分頁列在 common.css（平台留言頁共用） */
         .fab {
             position: fixed; right: 16px; bottom: calc(72px + var(--safe-bottom)); z-index: 30;
             width: 56px; height: 56px; border-radius: 50%; background: var(--primary); color: #fff;
@@ -295,9 +283,7 @@
         .sheet.open { display: block; animation: slideUp 0.2s ease-out; }
         .sheet-handle { width: 40px; height: 4px; border-radius: 2px; background: var(--border-strong); margin: 4px auto 12px; }
         .sheet h3 { margin: 0 0 12px; font-size: 1rem; }
-        .menu-item-2line { padding-top: 8px; padding-bottom: 8px; }
-        .menu-sub { display: block; margin-top: 2px; font-size: 0.78rem; color: var(--text-sub); line-height: 1.4; }
-        .menu-sub.bad { color: var(--flag-text); }
+        .menu-heading { padding: 4px 8px 2px; font-size: 0.75rem; font-weight: bold; color: var(--text-muted); }
         .menu-item {
             display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 0 8px;
             border: none; background: none; color: var(--text); font-size: 1rem; text-align: left; cursor: pointer;
@@ -382,6 +368,10 @@
         .help table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 6px 0; }
         .help th, .help td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
         .help td:first-child { white-space: nowrap; color: var(--text); }
+        .sync-bar { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); }
+        .sync-bar-text { flex: 1; min-width: 0; font-size: 0.8rem; color: var(--text-sub); line-height: 1.5; }
+        .sync-bar-text.bad { color: var(--flag-text); }
+        .sync-bar .btn { flex-shrink: 0; min-height: 38px; padding: 0 12px; font-size: 0.85rem; }
         .activity-seg { display: flex; gap: 4px; padding: 4px; margin: 12px 0; border-radius: 12px; background: var(--raised); }
         .activity-seg button { flex: 1; min-height: 40px; border: none; border-radius: 9px; background: none; color: var(--text-sub); font: inherit; font-weight: bold; cursor: pointer; }
         .activity-seg button.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); }
@@ -489,6 +479,10 @@
             <button role="tab" data-src="platform" onclick="setActivitySrc('platform')">平台動態</button>
             <button role="tab" data-src="me" onclick="setActivitySrc('me')">我的紀錄</button>
         </div>
+        <div class="sync-bar" id="syncBar">
+            <div class="sync-bar-text" id="autoSyncStatus"></div>
+            <button class="btn" onclick="openSync()">🔄 更新平台資料</button>
+        </div>
         <div id="activityList"></div>
     </section>
 
@@ -526,6 +520,7 @@
     <button data-tab="list" onclick="switchTab('list')"><span class="tab-icon">📚</span>作品</button>
     <button data-tab="weekly" onclick="switchTab('weekly')"><span class="tab-icon">📅</span>本週</button>
     <button data-tab="activity" onclick="switchTab('activity')"><span class="tab-icon">🕘</span>動態</button>
+    <button onclick="location.href = 'platform-comments.html'"><span class="tab-icon">💬</span>留言</button>
     <button data-tab="stats" onclick="switchTab('stats')"><span class="tab-icon">📊</span>統計</button>
 </nav>
 
@@ -535,17 +530,14 @@
 <!-- 更多功能選單 -->
 <div class="sheet" id="menuSheet">
     <div class="sheet-handle"></div>
+    <div class="menu-heading">資料</div>
     <button class="menu-item" onclick="downloadBackup()">💾 下載備份</button>
-    <button class="menu-item" onclick="openCleanup()">🧹 整理舊資料</button>
-    <button class="menu-item menu-item-2line" onclick="openSync()">
-        <span>🔄 更新平台資料<small class="menu-sub" id="autoSyncStatus"></small></span>
-    </button>
-    <button class="menu-item" id="themeMenuItem" onclick="cycleTheme()">🌓 外觀：跟隨手機</button>
     <button class="menu-item" onclick="document.getElementById('filePicker').click()">📤 匯入備份</button>
-    <a class="menu-item" href="platform-comments.html">💬 查詢平台留言</a>
-    <button class="menu-item" onclick="Sheets.open('helpSheet')">❓ 使用說明</button>
-    <div class="menu-divider"></div>
+    <button class="menu-item" onclick="openCleanup()">🧹 整理舊資料</button>
     <button class="menu-item danger" onclick="clearAllData()">🗑️ 清除全部資料</button>
+    <div class="menu-divider"></div>
+    <button class="menu-item" id="themeMenuItem" onclick="cycleTheme()">🌓 外觀：跟隨手機</button>
+    <button class="menu-item" onclick="Sheets.open('helpSheet')">❓ 使用說明</button>
 </div>
 <input type="file" id="filePicker" accept=".json,application/json" multiple hidden>
 
@@ -695,7 +687,7 @@
         </details>
 
         <details>
-            <summary>更新平台資料（⋯ 選單）</summary>
+            <summary>更新平台資料（動態分頁）</summary>
             <div class="help-body">
                 <ul>
                     <li>一次查所有有 Naver／Ridi／Naver Series／Bomtoon 的作品。有網址直接查；沒網址用韓文標題找，<b>完全同名而且只有一部</b>才會採用並補上網址。</li>
@@ -714,7 +706,7 @@
                     <li>檢查的作品：有平台網址、狀態是連載中／休刊／想看。</li>
                     <li>只會改三件事：<b>最新話數</b>、平台完結時改成<b>完結</b>、休刊的出了新一話時改回<b>連載中</b>。其他欄位都不動。</li>
                     <li>正在編輯的作品會跳過；開著視窗時等你關掉才刷新畫面，並跳提示。</li>
-                    <li>在哪裡看：跑的時候標題旁顯示「🔄 更新中…」；⋯ 選單「🔄 更新平台資料」下面有上次檢查的時間和結果。</li>
+                    <li>在哪裡看：跑的時候標題旁顯示「🔄 更新中…」；「動態」分頁的平台動態上方有上次檢查的時間和結果。</li>
                     <li>全部查失敗（例如伺服器沒醒）就不算今天檢查過，下次打開再試。</li>
                     <li>這種自動更新不會觸發「該備份了」的提醒（可以隨時從平台重新查到）。</li>
                 </ul>
@@ -755,7 +747,7 @@
                     <li><b>統計</b>：各平台閱讀狀態、評分分布、年度回顧（要填開始／結束日期）。</li>
                     <li><b>平台連結</b>：卡片上的平台標籤，有填網址（↗）直接打開作品頁，沒填（🔍）用韓文標題搜尋。</li>
                     <li><b>外觀</b>：⋯ 選單切換 跟隨手機／深色／淺色。</li>
-                    <li><b>平台留言</b>：⋯ 選單「💬 查詢平台留言」，那一頁右上角「？」有自己的說明。</li>
+                    <li><b>平台留言</b>：下方「💬 留言」分頁，那一頁右上角「？」有自己的說明。</li>
                 </ul>
             </div>
         </details>
@@ -828,10 +820,20 @@
     </div>
 </div>
 
-<script src="common.js?v=20260926-19"></script>
+<script src="common.js?v=20260926-20"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added', view: 'list' }, Store.loadUi());
+    // 從平台留言頁的底部分頁回來：index.html?tab=weekly
+    {
+        const params = new URLSearchParams(location.search);
+        const tab = params.get('tab');
+        if (['list', 'weekly', 'activity', 'stats'].includes(tab)) {
+            ui.tab = tab;
+            params.delete('tab');
+            history.replaceState(null, '', location.pathname + (params.toString() ? `?${params}` : ''));
+        }
+    }
     let currentEditIndex = -1;
     let isEditMode = false;
 
@@ -2308,6 +2310,7 @@
 
     function renderActivity() {
         const src = ui.activitySrc === 'me' ? 'me' : 'platform';
+        document.getElementById('syncBar').hidden = src !== 'platform';
         document.querySelectorAll('.activity-seg button').forEach(b => {
             b.classList.toggle('active', b.dataset.src === src);
             b.setAttribute('aria-selected', b.dataset.src === src);
@@ -2434,7 +2437,7 @@
         const { last } = loadAutoSync();
         el.classList.remove('bad');
         if (autoSyncRunning) { el.textContent = '背景自動檢查中…'; return; }
-        if (!AUTO_SYNC_ENABLED) { el.textContent = ''; return; }
+        if (!AUTO_SYNC_ENABLED) { el.textContent = '一次查所有作品的最新話數、封面、創作團隊'; return; }
         if (!last) { el.textContent = '每天第一次打開會自動檢查最新話數'; return; }
         const at = new Date(last.at);
         const pad = n => String(n).padStart(2, '0');
