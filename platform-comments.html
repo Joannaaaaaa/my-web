@@ -142,6 +142,9 @@
     </div>
     <div class="form-hint">每次更新會從「已掃到」的下一話開始，往後找幾話有沒有你的留言；還沒出的話數會自動停下。</div>
 
+    <h4>從 App 加入</h4>
+    <div id="appCandidates"></div>
+
     <h4>新增追蹤作品</h4>
     <input class="input" id="addUrl" placeholder="貼上作品網址（Webtoon、Naver、Ridi）" inputmode="url" autocapitalize="off" autocorrect="off">
     <div class="detect" id="addDetect"></div>
@@ -162,7 +165,7 @@
 
     <h4>其他</h4>
     <button class="btn" style="width:100%;" onclick="runUpdate({ full: true }); closeSettings();">完整重新檢查所有已知留言</button>
-    <div class="form-hint">平常更新只重新檢查 60 天內的留言；這個會檢查全部，比較久。</div>
+    <div class="form-hint">平常更新只重新檢查 90 天內的留言；這個會檢查全部，比較久。</div>
 </div>
 
 <script src="common.js?v=20260926-6"></script>
@@ -177,7 +180,7 @@
         naver: { label: 'Naver', color: '#03cf5d', pageId: (s, n) => `webtoon_${s.seriesId}_${n}` },
         ridi: { label: 'Ridi', color: '#00a0e9' },
     };
-    const RECHECK_DAYS = 60;
+    const RECHECK_DAYS = 90;
     const REQUEST_GAP = 400; // 每次請求之間的間隔（毫秒），避免被平台擋
 
     // ---------- 資料 ----------
@@ -293,7 +296,8 @@
     }
 
     // 某一話全部的留言（主留言）；回傳 null 代表這一話不存在
-    async function fetchRoots(platform, pageId, onPage) {
+    // stopWhen：某一頁出現符合條件的留言就不再往下抓（Ridi 一話只能留一則，找到就夠了）
+    async function fetchRoots(platform, pageId, onPage, stopWhen = null) {
         const all = [];
         let cursor = '', offset = 0;
         const limit = 200;
@@ -321,8 +325,9 @@
                 cursor = r.pagination?.next || '';
                 more = !!cursor;
             }
-            all.push(...list.map(c => normalize(platform, c)));
-            if (!more) break;
+            const normalized = list.map(c => normalize(platform, c));
+            all.push(...normalized);
+            if (!more || (stopWhen && normalized.some(stopWhen))) break;
             await sleep(REQUEST_GAP);
         }
         const seen = new Set();
@@ -346,11 +351,16 @@
 
         const prev = source.episodes[ep]?.comments || [];
         const knownParents = new Set(prev.filter(c => c.kind === 'reply').map(c => c.parentId));
-        const roots = await fetchRoots(platform, pageId, page => setProgress(`${source.name} 第 ${ep} 話${page > 1 ? `（第 ${page} 頁）` : ''}`));
+        const ridiSingle = platform === 'ridi';
+        const roots = await fetchRoots(platform, pageId,
+            page => setProgress(`${source.name} 第 ${ep} 話${page > 1 ? `（第 ${page} 頁）` : ''}`),
+            ridiSingle ? c => isMine(platform, c) : null);
         if (roots === null) return { exists: false };
 
         const found = [];
-        for (const c of roots) {
+        // Ridi 找到我的那一則後，其他留言的回覆就不用再翻
+        const ridiFound = ridiSingle && roots.some(c => isMine(platform, c));
+        for (const c of ridiFound ? roots.filter(c => isMine(platform, c)) : roots) {
             const mine = isMine(platform, c);
             if (!c.replies || !(mine || knownParents.has(c.id) || mode === 'discover')) {
                 if (mine) { rememberUser(platform, c); found.push({ ...c, kind: 'main', replyList: [] }); }
@@ -427,7 +437,7 @@
                         }
                         continue;
                     }
-                    // 1. 重新檢查已知有留言的話數（最近 60 天的，或 full 全部）
+                    // 1. 重新檢查已知有留言的話數（最近 90 天的，或 full 全部）
                     const cutoff = Date.now() - RECHECK_DAYS * 864e5;
                     const known = Object.keys(source.episodes).map(Number).sort((a, b) => a - b).filter(ep => {
                         const e = source.episodes[ep];
@@ -592,6 +602,7 @@
         document.querySelectorAll('[data-user]').forEach(el => { el.value = tracker.usernames[el.dataset.user] || ''; });
         document.getElementById('newPerRun').value = tracker.newPerRun;
         renderSourceEditors(focusId);
+        renderAppCandidates();
         document.getElementById('settings').hidden = false;
         document.getElementById('settingsBackdrop').hidden = false;
         document.body.classList.add('no-scroll');
@@ -633,6 +644,55 @@
         document.getElementById('addName').value = '';
         document.getElementById('addFrom').value = '';
         document.getElementById('addDetect').textContent = '';
+        renderSourceEditors();
+    }
+
+    // ---------- 從 App 加入 ----------
+    // App 裡有填 Naver／Ridi 作品網址、還沒追蹤的作品（Kakao、Bomtoon 沒有留言抓取功能）
+    const APP_PLATFORM_KEYS = { Naver: 'naver', Ridibooks: 'ridi' };
+    const squash = t => String(t || '').replace(/\s+/g, '').toLowerCase();
+
+    function isTracked(platform, seriesId, review) {
+        return tracker.sources.some(s => s.platform === platform && (
+            s.seriesId === seriesId
+            // Ridi 每一話網址不同，再用標題比對（忽略空格）
+            || (platform === 'ridi' && [review.krTitle, review.title].some(t => t && squash(t) === squash(s.name)))
+        ));
+    }
+
+    function appCandidates() {
+        const list = [];
+        Store.loadReviews().forEach(r => {
+            Object.entries(APP_PLATFORM_KEYS).forEach(([appKey, platform]) => {
+                const p = parseSourceUrl((r.links || {})[appKey]);
+                if (!p || p.platform !== platform || isTracked(platform, p.seriesId, r)) return;
+                // 習慣更新當下就留言：從目前看到的話數往前幾話開始掃，最近看的幾話也會被檢查到
+                const ep = normalizeEpisode(r.episode)?.main || 0;
+                list.push({ ...p, name: cleanTitleBrackets(r.title) || r.krTitle, url: r.links[appKey], lastScanned: Math.max(0, ep - tracker.newPerRun) });
+            });
+        });
+        return list;
+    }
+
+    function renderAppCandidates() {
+        const list = appCandidates();
+        document.getElementById('appCandidates').innerHTML = list.length ? `
+            ${list.map((c, k) => `
+                <div class="src-edit" style="display:flex; align-items:center; gap:8px;">
+                    <span class="tag" style="--tag-color: ${PLATFORM_INFO[c.platform].color}">${PLATFORM_INFO[c.platform].label}</span>
+                    <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(c.name)}</span>
+                    <span style="font-size:0.75rem; color: var(--text-muted); white-space:nowrap;">從第 ${c.lastScanned + 1} 話起</span>
+                    <button class="btn btn-primary" style="min-height:34px; padding:0 12px; font-size:0.8rem;" onclick="addFromApp(${k})">加入</button>
+                </div>`).join('')}
+            ${list.length > 1 ? `<button class="btn" style="width:100%;" onclick="addFromApp('all')">全部加入（${list.length} 部）</button>` : ''}`
+            : '<div class="form-hint">App 裡有填 Naver 或 Ridi 作品網址的作品都已經在追蹤了。要加入其他作品，先到 App 的作品編輯頁填平台網址。</div>';
+    }
+
+    function addFromApp(which) {
+        const list = appCandidates();
+        (which === 'all' ? list : [list[which]]).forEach(c => createSource(c));
+        save();
+        renderAppCandidates();
         renderSourceEditors();
     }
 
