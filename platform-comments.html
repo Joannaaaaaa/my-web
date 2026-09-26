@@ -91,6 +91,19 @@
         .user-grid label { font-size: 0.85rem; color: var(--text-sub); }
         .detect { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; min-height: 1.2em; }
         .detect.ok { color: var(--status-ongoing); }
+        /* 使用說明 */
+        .help details { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; background: var(--surface); }
+        .help summary { list-style: none; cursor: pointer; padding: 12px 14px; font-weight: bold; min-height: 44px; display: flex; justify-content: space-between; align-items: center; }
+        .help summary::-webkit-details-marker { display: none; }
+        .help summary::after { content: '▾'; color: var(--text-muted); transition: transform 0.2s; }
+        .help details[open] summary::after { transform: rotate(180deg); }
+        .help .help-body { padding: 0 14px 12px; font-size: 0.88rem; line-height: 1.7; color: var(--text-sub); }
+        .help .help-body ul, .help .help-body ol { margin: 4px 0; padding-left: 20px; }
+        .help .help-body li { margin: 3px 0; }
+        .help .help-body b { color: var(--text); }
+        .help table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin: 6px 0; }
+        .help th, .help td { border: 1px solid var(--border); padding: 5px 6px; text-align: left; vertical-align: top; }
+        .help th { background: var(--raised); color: var(--text-muted); }
         .src-edit { border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-bottom: 8px; }
         .src-edit.flash { border-color: var(--primary); }
         .src-edit-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
@@ -108,6 +121,7 @@
     <a class="icon-btn" href="index.html" aria-label="返回" style="text-decoration:none; font-size:2.2rem;">‹</a>
     <h1>平台留言</h1>
     <span class="server-pill" id="serverPill">連線中…</span>
+    <button class="icon-btn" onclick="openHelp()" aria-label="使用說明" style="font-size:1.1rem; font-weight:bold;">？</button>
     <button class="icon-btn" onclick="openSettings()" aria-label="設定">⚙</button>
 </header>
 
@@ -122,7 +136,111 @@
     <div id="sources"></div>
 </main>
 
-<div class="backdrop" id="settingsBackdrop" hidden onclick="closeSettings()"></div>
+<div class="backdrop" id="settingsBackdrop" hidden onclick="closeSettings(); closeHelp();"></div>
+<div class="sheet help" id="helpSheet" hidden>
+    <div class="sheet-top">
+        <h3>使用說明</h3>
+        <button class="icon-btn" onclick="closeHelp()" aria-label="關閉">✕</button>
+    </div>
+
+    <details open>
+        <summary>第一次設定</summary>
+        <div class="help-body">
+            <ol>
+                <li>在 App 的作品編輯頁：韓版勾選 <b>Naver／Ridi</b>；有在台版看的，打開 <b>「台版 Webtoon」</b>標記（台版譯名跟標題不同才填，例如 Merry Psycho → 特務惹上瘋狗）。</li>
+                <li>回到這頁按 ⚙，填三個平台的<b>帳號名稱</b>（填開頭幾個字就好，平台會遮住部分名字）。</li>
+                <li>「從 App 加入」：有填網址的直接加入；沒填的按 <b>🔍 用標題查</b>。</li>
+                <li>台版作品要填<b>「台版看到第幾話」</b>，再按加入。</li>
+                <li>按 <b>🔄 更新留言</b>。</li>
+            </ol>
+        </div>
+    </details>
+
+    <details>
+        <summary>加入追蹤的規則</summary>
+        <div class="help-body">
+            <table>
+                <tr><th></th><th>Naver／Ridi（韓版）</th><th>台版 Webtoon</th></tr>
+                <tr><td>哪些作品</td><td>App 有勾這個平台</td><td>App 有「台版 Webtoon」標記</td></tr>
+                <tr><td>怎麼找作品</td><td>有網址直接用；沒有就用<b>韓文標題</b>查</td><td>用<b>台版譯名</b>（沒填用標題）查</td></tr>
+                <tr><td>從哪一話開始找</td><td>App 看到的話數往前 3 話</td><td>你填的台版進度的下一話</td></tr>
+            </table>
+            <ul>
+                <li>標題要<b>完全一樣</b>才自動對上（忽略空格、[완전판]、括號）；好幾個結果時讓你選。</li>
+                <li><b>Ridi</b> 只找漫畫、不會找到小說；同名有兩個版本時選<b>완전판</b>。</li>
+                <li>台版要自己填進度，是因為台版有付費搶先看，最新話數常比你看到的多。</li>
+            </ul>
+        </div>
+    </details>
+
+    <details>
+        <summary>按鈕做什麼</summary>
+        <div class="help-body">
+            <table>
+                <tr><th>按鈕</th><th>範圍</th><th>重看舊留言</th><th>往後找新話數</th></tr>
+                <tr><td>🔄 更新留言</td><td>全部作品</td><td>✅ 90 天內</td><td>✅ 每部往後 3 話</td></tr>
+                <tr><td>只更新這部</td><td>這一部</td><td>✅ 90 天內</td><td>✅ 往後 3 話</td></tr>
+                <tr><td>補掃話數</td><td>這一部</td><td>❌</td><td>只找你輸入的範圍（例如 40-45，一次最多 30 話）</td></tr>
+                <tr><td>完整重新檢查（⚙）</td><td>全部作品</td><td>✅ 全部，不限 90 天</td><td>✅</td></tr>
+                <tr><td>新回覆都看過了</td><td>這一部</td><td colspan="2">清掉「新回覆」標示</td></tr>
+            </table>
+            <ul>
+                <li>按「停止」：已經抓完的部分會先存下來。</li>
+                <li>「每次往後找」幾話可以在 ⚙ 改（1～20）。</li>
+            </ul>
+        </div>
+    </details>
+
+    <details>
+        <summary>更新時怎麼找留言</summary>
+        <div class="help-body">
+            <ol>
+                <li><b>重看已找到的留言</b>：90 天內的留言，重抓讚數、倒讚數、回覆數；回覆變多就標「新回覆」，那部作品排到最前面。</li>
+                <li><b>往後找新留言</b>：從「已掃到第 N 話」的下一話開始往後找，遇到還沒出的話數就停。</li>
+            </ol>
+            <ul>
+                <li>會找你的<b>主留言</b>，也會找你<b>回覆在別人底下</b>的留言。</li>
+                <li><b>掃過但當時沒找到留言的話數，之後不會再看。</b>事後才補的留言，請用「補掃話數」。</li>
+                <li>以前找得到、這次找不到的留言，會標示「可能被刪除或改名」，但保留舊紀錄。</li>
+                <li>Ridi 一話只能留一則，找到就停，所以比較快；Naver、台版一話可以留很多則，會整話看完。</li>
+            </ul>
+        </div>
+    </details>
+
+    <details>
+        <summary>怎麼判斷是我的留言</summary>
+        <div class="help-body">
+            <ul>
+                <li>作者名稱<b>開頭</b>符合 ⚙ 裡的帳號名稱（Ridi 會遮成 abc***** 這樣）。</li>
+                <li>找到一次之後會記住你的<b>帳號 ID</b>，之後用 ID 比對，比較不會認錯。</li>
+                <li>換暱稱後找不到留言，到 ⚙ 改帳號名稱就好。</li>
+            </ul>
+        </div>
+    </details>
+
+    <details>
+        <summary>資料存在哪裡</summary>
+        <div class="help-body">
+            <ul>
+                <li>只存<b>你自己的留言</b>（內容、話數、讚數、回覆數、BEST、時間）、別人回覆你的內容，以及追蹤設定；翻到的其他留言比對完就丟掉。</li>
+                <li>存在這支手機的瀏覽器裡；主頁「⋯ → 下載備份」會一起打包，匯入備份時還原。</li>
+                <li>備份檔裡有別人回覆你的暱稱和內容，要傳給別人時留意。</li>
+            </ul>
+        </div>
+    </details>
+
+    <details>
+        <summary>伺服器與連線</summary>
+        <div class="help-body">
+            <ul>
+                <li>平台不讓網頁直接抓留言，所以透過伺服器幫忙抓：正式網站用 <b>Render</b>，測試網址用<b>電腦上的伺服器</b>。</li>
+                <li>Render 免費方案閒置約 15 分鐘會休眠，打開這頁時會先叫醒它，右上角顯示「喚醒伺服器中…」→「已連線」。</li>
+                <li>「話數偏移」（⚙ 裡每部作品）：Naver／台版網址上的話數跟實際話數不一樣時才需要調整。</li>
+            </ul>
+        </div>
+    </details>
+</div>
+
 <div class="sheet" id="settings" hidden>
     <div class="sheet-top">
         <h3>留言追蹤設定</h3>
@@ -589,6 +707,20 @@
     }
 
     // ---------- 設定 ----------
+    // ---------- 使用說明 ----------
+    function openHelp() {
+        document.getElementById('helpSheet').hidden = false;
+        document.getElementById('settingsBackdrop').hidden = false;
+        document.body.classList.add('no-scroll');
+    }
+
+    function closeHelp() {
+        if (document.getElementById('helpSheet').hidden) return;
+        document.getElementById('helpSheet').hidden = true;
+        document.getElementById('settingsBackdrop').hidden = true;
+        document.body.classList.remove('no-scroll');
+    }
+
     function openSettings(focusId) {
         document.querySelectorAll('[data-user]').forEach(el => { el.value = tracker.usernames[el.dataset.user] || ''; });
         document.getElementById('newPerRun').value = tracker.newPerRun;
@@ -602,6 +734,7 @@
     }
 
     function closeSettings() {
+        if (document.getElementById('settings').hidden) return;
         document.getElementById('settings').hidden = true;
         document.getElementById('settingsBackdrop').hidden = true;
         document.body.classList.remove('no-scroll');
