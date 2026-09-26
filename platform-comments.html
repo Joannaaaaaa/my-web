@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260927-1">
+    <link rel="stylesheet" href="common.css?v=20260927-2">
     <style>
         body { padding-bottom: calc(80px + var(--safe-bottom)); } /* 留空間給底部分頁列 */
         body.no-scroll { overflow: hidden; }
@@ -87,6 +87,12 @@
         .sheet-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
         .sheet-top h3 { margin: 0; font-size: 1rem; }
         .sheet h4 { font-size: 0.88rem; color: var(--text-sub); margin: 18px 0 8px; }
+        .rescan-grid { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; margin-top: 4px; }
+        .rescan-grid label { font-size: 0.85rem; color: var(--text-sub); }
+        .rescan-range { display: flex; align-items: center; gap: 8px; }
+        .rescan-range .input { min-width: 0; text-align: center; }
+        .rescan-preview { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--raised); font-size: 0.85rem; color: var(--text-sub); min-height: 1.4em; }
+        .rescan-preview.bad { color: var(--flag-text); }
         .account-group { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
         .account-group h5 { margin: 0 0 6px; font-size: 0.85rem; }
         .account-row { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; border-top: 1px solid var(--border); cursor: pointer; }
@@ -153,7 +159,7 @@
     <button onclick="location.href = 'index.html?tab=stats'"><span class="tab-icon">📊</span>統計</button>
 </nav>
 
-<div class="backdrop" id="settingsBackdrop" hidden onclick="closeSettings(); closeHelp();"></div>
+<div class="backdrop" id="settingsBackdrop" hidden onclick="closeSettings(); closeHelp(); closeRescan();"></div>
 <div class="sheet help" id="helpSheet" hidden>
     <div class="sheet-top">
         <h3>使用說明</h3>
@@ -197,7 +203,7 @@
                 <tr><th>按鈕</th><th>範圍</th><th>重看舊留言</th><th>往後找新話數</th></tr>
                 <tr><td>🔄 更新留言</td><td>全部作品</td><td>✅ 90 天內</td><td>✅ 每部往後 3 話</td></tr>
                 <tr><td>只更新這部</td><td>這一部</td><td>✅ 90 天內</td><td>✅ 往後 3 話</td></tr>
-                <tr><td>補掃話數</td><td>這一部</td><td>❌</td><td>只找你輸入的範圍（例如 40-45，一次最多 30 話）</td></tr>
+                <tr><td>補掃話數</td><td>這一部</td><td>❌</td><td>只找你選的範圍：選段落（本篇／外傳／特別外傳／後記）填第幾話，會用平台標題換算成網址編號；也可以直接填網址編號。一次最多 30 話</td></tr>
                 <tr><td>完整重新檢查（⚙）</td><td>全部作品</td><td>✅ 全部，不限 90 天</td><td>✅</td></tr>
                 <tr><td>新回覆都看過了</td><td>這一部</td><td colspan="2">清掉「新回覆」標示</td></tr>
             </table>
@@ -259,6 +265,32 @@
     </details>
 </div>
 
+<div class="sheet" id="rescanSheet" hidden>
+    <div class="sheet-top">
+        <h3 id="rescanTitle">補掃話數</h3>
+        <button class="icon-btn" onclick="closeRescan()" aria-label="關閉">✕</button>
+    </div>
+    <div class="rescan-grid">
+        <label for="rescanPart">段落</label>
+        <select class="input" id="rescanPart" onchange="updateRescanPreview()">
+            <option value="main">本篇</option>
+            <option value="side">外傳</option>
+            <option value="special">特別外傳</option>
+            <option value="after">後記</option>
+            <option value="url">網址編號</option>
+        </select>
+        <label for="rescanFrom">第幾話</label>
+        <div class="rescan-range">
+            <input class="input" id="rescanFrom" inputmode="numeric" placeholder="從" oninput="updateRescanPreview()">
+            <span>～</span>
+            <input class="input" id="rescanTo" inputmode="numeric" placeholder="到（可不填）" oninput="updateRescanPreview()">
+        </div>
+    </div>
+    <div class="rescan-preview" id="rescanPreview"></div>
+    <button class="btn btn-primary" style="width:100%; margin-top:10px;" id="rescanStart" onclick="startRescan()">開始補掃</button>
+    <div class="form-hint">一次最多 30 話。標題沒寫話數的（例如只有「특별편」），照那一段的順序算第幾篇。</div>
+</div>
+
 <div class="sheet" id="settings" hidden>
     <div class="sheet-top">
         <h3>留言追蹤設定</h3>
@@ -296,7 +328,7 @@
     <div class="form-hint">平常更新只重新檢查 90 天內的留言；這個會檢查全部，比較久。</div>
 </div>
 
-<script src="common.js?v=20260927-1"></script>
+<script src="common.js?v=20260927-2"></script>
 <script>
     // API_BASE_URL 在 common.js
     const PLATFORM_INFO = {
@@ -609,7 +641,7 @@
 
     function cancelRun() { cancelled = true; }
 
-    // full：重新檢查所有已知留言；range：只補掃某部作品的指定話數
+    // full：重新檢查所有已知留言；range：只補掃某部作品的這些話數（App 話數＝網址編號 − 偏移）
     async function runUpdate({ full = false, only = null, range = null } = {}) {
         if (running) return;
         const errors = [];
@@ -625,7 +657,7 @@
                 if (!tracker.usernames[source.platform]) { errors.push(`${source.name}：還沒設定 ${label} 帳號名稱`); continue; }
                 try {
                     if (range) {
-                        for (let ep = range[0]; ep <= range[1]; ep++) {
+                        for (const ep of range) {
                             const res = await scanEpisode(source, ep, 'discover');
                             if (!res.exists) break;
                             mergeEpisode(source, ep, res);
@@ -686,14 +718,87 @@
         }
     }
 
-    function rescanSource(id) {
+    // ---------- 補掃話數 ----------
+    // 選段落（本篇／外傳／特別外傳／後記）＋第幾話，用平台標題換算成網址編號；也可以直接填網址編號
+    const RESCAN_MAX = 30;
+    const PART_LABEL = { main: '本篇', side: '外傳', special: '特別外傳', after: '後記', url: '網址編號' };
+    let rescan = null; // { source, index（話次表，還沒載入是 null）, eps（要掃的 App 話數） }
+
+    async function rescanSource(id) {
         const source = tracker.sources.find(s => s.id === id);
-        const input = prompt(`《${source.name}》要補掃第幾話？\n例如 40-45 或 12（一次最多 30 話）`);
-        if (!input) return;
-        const m = input.match(/^\s*(\d+)\s*(?:[-~～到]\s*(\d+))?\s*$/);
-        if (!m) return alert('格式不正確，請輸入例如 40-45');
-        const from = Number(m[1]), to = Math.min(Number(m[2] || m[1]), from + 29);
-        runUpdate({ only: id, range: [from, to] });
+        rescan = { source, index: null, eps: [] };
+        document.getElementById('rescanTitle').textContent = `補掃《${source.name}》`;
+        document.getElementById('rescanPart').value = 'main';
+        document.getElementById('rescanFrom').value = '';
+        document.getElementById('rescanTo').value = '';
+        document.getElementById('rescanSheet').hidden = false;
+        document.getElementById('settingsBackdrop').hidden = false;
+        document.body.classList.add('no-scroll');
+        updateRescanPreview('讀取話次標題中…');
+        try {
+            const { titles } = await api(`/episode-titles?platform=${source.platform}&seriesId=${source.seriesId}`);
+            if (rescan?.source !== source) return;
+            rescan.index = episodeIndex(titles);
+        } catch {
+            if (rescan?.source !== source) return;
+            rescan.index = [];
+            document.getElementById('rescanPart').value = 'url';
+        }
+        updateRescanPreview();
+    }
+
+    function closeRescan() {
+        if (document.getElementById('rescanSheet').hidden) return;
+        document.getElementById('rescanSheet').hidden = true;
+        document.getElementById('settingsBackdrop').hidden = true;
+        document.body.classList.remove('no-scroll');
+        rescan = null;
+    }
+
+    function updateRescanPreview(message) {
+        const box = document.getElementById('rescanPreview');
+        const btn = document.getElementById('rescanStart');
+        const show = (text, bad = false) => { box.textContent = text; box.classList.toggle('bad', bad); };
+        rescan.eps = [];
+        btn.disabled = true;
+        if (message) return show(message);
+        const part = document.getElementById('rescanPart').value;
+        const offset = Number(rescan.source.offset) || 0;
+        const fromRaw = document.getElementById('rescanFrom').value.trim();
+        const toRaw = document.getElementById('rescanTo').value.trim();
+        if (part !== 'url' && !rescan.index?.length) return show('讀不到這部作品的話次標題（伺服器沒連上？），只能用「網址編號」', true);
+        if (part === 'after' && !fromRaw) {
+            const nos = rescan.index.filter(x => x.part === 'after' || x.withAfter).map(x => x.no); // 「외전 마지막화+후기」也算
+            if (!nos.length) return show('這部作品沒有找到後記', true);
+            rescan.eps = nos.map(no => no - offset);
+        } else {
+            if (!/^\d+$/.test(fromRaw) || (toRaw && !/^\d+$/.test(toRaw))) return show(part === 'after' ? '後記通常只有一篇，可以不填' : '填第幾話，例如 1 ～ 10');
+            const from = Number(fromRaw), to = toRaw ? Number(toRaw) : from;
+            if (to < from) return show('「到」要比「從」大', true);
+            if (part === 'url') {
+                rescan.eps = Array.from({ length: to - from + 1 }, (_, k) => from + k - offset);
+            } else {
+                const hits = rescan.index.filter(x => x.part === part && x.k >= from && x.k <= to);
+                if (!hits.length) {
+                    const max = Math.max(0, ...rescan.index.filter(x => x.part === part).map(x => x.k));
+                    return show(max ? `${PART_LABEL[part]}只到第 ${max} 話` : `這部作品沒有找到${PART_LABEL[part]}`, true);
+                }
+                rescan.eps = hits.map(x => x.no - offset);
+            }
+        }
+        if (rescan.eps.length > RESCAN_MAX) return show(`一次最多 ${RESCAN_MAX} 話，目前選了 ${rescan.eps.length} 話`, true);
+        const nos = rescan.eps.map(ep => ep + offset);
+        const range = nos.length === 1 ? `第 ${nos[0]} 號` : `第 ${nos[0]}～${nos[nos.length - 1]} 號`;
+        const partText = part === 'url' ? '' : `${PART_LABEL[part]}${part === 'after' && !fromRaw ? '' : ` ${fromRaw}${toRaw && toRaw !== fromRaw ? `～${toRaw}` : ''} 話`} → `;
+        show(`${partText}網址${range}，共 ${rescan.eps.length} 話`);
+        btn.disabled = false;
+    }
+
+    function startRescan() {
+        if (!rescan?.eps.length) return;
+        const { source, eps } = rescan;
+        closeRescan();
+        runUpdate({ only: source.id, range: eps });
     }
 
     function markSeen(id) {
@@ -720,25 +825,46 @@
 
     // ---------- 話次標題（外傳顯示成「外傳 1 話」，不是網址編號「第 229 話」） ----------
     // source.epTitles = { 網址編號: 平台上的標題 }，只存有留言的話數；缺的從伺服器 /episode-titles 補
-    function episodeTitleLabel(title) {
-        let t = String(title || '').trim();
-        if (!t) return '';
-        if (/[\u4e00-\u9fff]/.test(t) && !/[\uac00-\ud7a3]/.test(t)) return t; // 台版：本來就是中文標題
-        const special = /특별\s*외전|특외|특별편/.test(t);
-        const side = !special && /외전|번외/.test(t);
-        const after = /후기/.test(t);
-        const nums = [...t.matchAll(/(\d+)\s*화/g)];
-        const lead = t.match(/^(\d+)\.\s/); // Naver 有些作品寫「331. 제107장 …」
+    // 平台標題 → { part: main／side／special／after／other, n（標題寫的第幾話，沒寫是 null）, last, season, withAfter, plain }
+    // 韓文：특별외전／특외／특별편＝特別外傳，외전／번외＝外傳，후기＝後記；台版中文：特別外傳／特別篇、外傳／番外、後記
+    function parseEpisodeTitle(title) {
+        const t = String(title || '').trim();
+        const special = /특별\s*외전|특외|특별편|特別外傳|特別篇/.test(t);
+        const side = !special && /외전|번외|外傳|番外/.test(t);
+        const withAfter = /후기|後記/.test(t);
+        const nums = [...t.matchAll(/(\d+)\s*(?:화|話)/g)];
+        const lead = t.match(/^(\d+)\.\s/); // Naver「331. 제107장 …」、台版「306. Ep.50 …」
         const n = nums.length ? Number(nums[nums.length - 1][1]) : lead ? Number(lead[1]) : null;
         const last = /마지막\s*화|최종화/.test(t);
-        const season = (t.match(/(\d+)\s*부(?![가-힣])/) || [])[1]; // 2부 144화 → 第 2 部
-        const part = special ? '特別外傳' : side ? '外傳' : season ? `第 ${season} 部` : '';
+        const season = (t.match(/(\d+)\s*부(?![가-힣])/) || [])[1] || '';
         const plain = t.replace(/^.*\[(?:완전판|개정판)\]\s*/, ''); // Ridi 標題前面是作品名＋[완전판]
-        if (!special && !side && after && n == null) return '後記';
-        if (!special && !side && n == null) return plain; // 序章、公告這類：直接顯示
-        if (n == null && !last) return `${part}（${plain.replace(/특별\s*외전|특외|특별편|외전|번외/, '').replace(/^[\s:：-]+/, '').trim()}）`;
-        const label = n != null ? `${part ? part + ' ' : ''}${n} 話` : `${part} 最終話`;
-        return label + (after && part ? '＋後記' : '');
+        const part = special ? 'special' : side ? 'side' : withAfter && n == null ? 'after' : n != null ? 'main' : 'other';
+        return { part, n, last, season, withAfter, plain };
+    }
+
+    function episodeTitleLabel(title) {
+        const t = String(title || '').trim();
+        if (!t) return '';
+        if (/[\u4e00-\u9fff]/.test(t) && !/[\uac00-\ud7a3]/.test(t)) return t; // 台版：本來就是中文標題
+        const e = parseEpisodeTitle(t);
+        if (e.part === 'after') return '後記';
+        if (e.part === 'other') return e.plain; // 序章、公告這類：直接顯示
+        const part = e.part === 'special' ? '特別外傳' : e.part === 'side' ? '外傳' : e.season ? `第 ${e.season} 部` : '';
+        if (e.n == null && !e.last) return `${part}（${e.plain.replace(/특별\s*외전|특외|특별편|외전|번외/, '').replace(/^[\s:：-]+/, '').trim()}）`;
+        const label = e.n != null ? `${part ? part + ' ' : ''}${e.n} 話` : `${part} 最終話`;
+        return label + (e.withAfter && e.part !== 'main' ? '＋後記' : '');
+    }
+
+    // 整部作品的話次表：[{ no（網址編號）, part, k（那一段的第幾話）, title }]，依網址編號排序
+    // 標題有寫話數就用；沒寫的接在同一段前一話後面（第一篇就是 1）
+    function episodeIndex(titles) {
+        const count = {};
+        return Object.keys(titles).map(Number).sort((a, b) => a - b).map(no => {
+            const e = parseEpisodeTitle(titles[no]);
+            const k = e.n ?? (count[e.part] || 0) + 1;
+            count[e.part] = Math.max(count[e.part] || 0, k);
+            return { no, part: e.part, k, withAfter: e.withAfter, title: titles[no] };
+        });
     }
 
     function episodeLabelOf(source, ep) {
