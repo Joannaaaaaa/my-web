@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260927-2">
+    <link rel="stylesheet" href="common.css?v=20260927-3">
     <style>
         .topbar {
             position: sticky; top: 0; z-index: 10;
@@ -58,7 +58,7 @@
     <button class="btn btn-primary" onclick="saveToGallery()">儲存</button>
 </div>
 
-<script src="common.js?v=20260927-2"></script>
+<script src="common.js?v=20260927-3"></script>
 <script>
     const form = createReviewForm(document.getElementById('reviewForm'), {
         teamOpen: true,

@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260927-2">
+    <link rel="stylesheet" href="common.css?v=20260927-3">
     <style>
         body { padding-bottom: calc(80px + var(--safe-bottom)); } /* 留空間給底部分頁列 */
         body.no-scroll { overflow: hidden; }
@@ -95,6 +95,8 @@
         .rescan-preview.bad { color: var(--flag-text); }
         .account-group { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
         .account-group h5 { margin: 0 0 6px; font-size: 0.85rem; }
+        .account-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .account-reset { min-height: 30px; padding: 0 12px; font-size: 0.78rem; }
         .account-row { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; border-top: 1px solid var(--border); cursor: pointer; }
         .account-row:first-of-type { border-top: none; }
         .account-row input { width: 20px; height: 20px; margin-top: 2px; flex-shrink: 0; accent-color: var(--primary); }
@@ -238,6 +240,7 @@
                 <li>找到後會記住那則留言的<b>帳號編號</b>，之後同一個編號的留言也算你的。</li>
                 <li><b>名字很短時會認錯</b>：Naver 常只顯示前 3 個字（例如 joa），別人開頭一樣也會被當成你。掃過之後到 ⚙「確認是哪個帳號」勾你自己的，沒勾的留言會被移除，<b>之後只認勾選的帳號編號</b>、不再看名字。頁面上方出現「來自好幾個帳號」的提醒時，就是該確認了。</li>
                 <li>換暱稱後找不到留言，到 ⚙ 改帳號名稱就好；確認過帳號的話，換暱稱也照樣找得到（帳號編號不變）。</li>
+                <li><b>換新帳號或多一個帳號</b>：在「確認是哪個帳號」按那個平台的<b>重設</b>（留言都會保留），改帳號名稱、掃描後，再回來把新舊帳號都勾起來。</li>
             </ul>
         </div>
     </details>
@@ -328,7 +331,7 @@
     <div class="form-hint">平常更新只重新檢查 90 天內的留言；這個會檢查全部，比較久。</div>
 </div>
 
-<script src="common.js?v=20260927-2"></script>
+<script src="common.js?v=20260927-3"></script>
 <script>
     // API_BASE_URL 在 common.js
     const PLATFORM_INFO = {
@@ -464,7 +467,7 @@
     function renderAccountConfirm() {
         const groups = accountGroups();
         const box = document.getElementById('accountConfirm');
-        const platforms = Object.keys(groups).filter(p => groups[p].size);
+        const platforms = Object.keys(groups).filter(p => groups[p].size || tracker.confirmedIds[p].length);
         if (!platforms.length) {
             box.innerHTML = '<div class="form-hint">掃到留言之後，這裡會列出找到的帳號讓你確認。</div>';
             return;
@@ -474,7 +477,10 @@
             const list = [...groups[p].values()].sort((a, b) => b.count - a.count);
             return `
                 <div class="account-group">
-                    <h5>${PLATFORM_INFO[p].label}${confirmed.length ? '（已確認）' : list.length > 1 ? '（有好幾個，請勾你自己的）' : ''}</h5>
+                    <div class="account-head">
+                        <h5>${PLATFORM_INFO[p].label}${confirmed.length ? '（已確認）' : list.length > 1 ? '（有好幾個，請勾你自己的）' : ''}</h5>
+                        ${confirmed.length ? `<button class="btn account-reset" onclick="resetAccount('${p}')">重設</button>` : ''}
+                    </div>
                     ${list.map(g => `
                         <label class="account-row">
                             <input type="checkbox" data-account="${p}" value="${escapeHtml(g.id)}" ${!confirmed.length || confirmed.includes(g.id) ? 'checked' : ''}>
@@ -487,6 +493,16 @@
                 </div>`;
         }).join('') + '<button class="btn btn-primary" style="width:100%;" onclick="applyAccountConfirm()">只保留勾選的帳號</button>'
             + '<div class="form-hint">沒勾的帳號，找到的留言會被移除，之後掃描也只認勾選的帳號編號。</div>';
+    }
+
+    // 重設：清掉「只認哪些帳號」，改回用名字比對；已找到的留言和記住的帳號編號都保留（舊帳號照樣認得出來）
+    function resetAccount(platform) {
+        const label = PLATFORM_INFO[platform].label;
+        if (!confirm(`重設 ${label} 的帳號確認？\n\n・已經找到的留言都會保留\n・之後改回用「帳號名稱」比對，舊帳號照樣認得出來\n・換新帳號的話，先改帳號名稱、掃描，再回來勾選確認`)) return;
+        tracker.confirmedIds[platform] = [];
+        save();
+        renderAccountConfirm();
+        render();
     }
 
     function applyAccountConfirm() {
