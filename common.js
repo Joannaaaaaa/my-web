@@ -93,7 +93,7 @@ function platformLinkTagsHtml(review) {
 }
 
 // 台版 Webtoon 標記（不是發行平台，不算進平台統計）：點了到台版用譯名搜尋
-const TW_WEBTOON_COLOR = '#00d564';
+const TW_WEBTOON_COLOR = '#a259ff'; // 跟 Naver 的綠色分開
 function twWebtoonTitle(review) {
     return (review.twTitle || '').trim() || cleanTitleBrackets(review.title);
 }

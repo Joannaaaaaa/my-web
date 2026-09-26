@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260927-3">
+    <link rel="stylesheet" href="common.css?v=20260927-4">
     <style>
         body { padding-bottom: calc(80px + var(--safe-bottom)); } /* 留空間給底部分頁列 */
         body.no-scroll { overflow: hidden; }
@@ -194,6 +194,7 @@
                 <li>標題要<b>完全一樣</b>才自動對上（忽略空格、[완전판]、括號）；好幾個結果時讓你選。</li>
                 <li><b>Ridi</b> 只找漫畫、不會找到小說；同名有兩個版本時選<b>완전판</b>。</li>
                 <li>台版要自己填進度，是因為台版有付費搶先看，最新話數常比你看到的多。</li>
+                <li>台版<b>大人系</b>作品的網頁只列前幾話（其他在 App），留言照樣抓得到；話數顯示和補掃會照順序推算。</li>
             </ul>
         </div>
     </details>
@@ -331,11 +332,11 @@
     <div class="form-hint">平常更新只重新檢查 90 天內的留言；這個會檢查全部，比較久。</div>
 </div>
 
-<script src="common.js?v=20260927-3"></script>
+<script src="common.js?v=20260927-4"></script>
 <script>
     // API_BASE_URL 在 common.js
     const PLATFORM_INFO = {
-        webtoon: { label: 'Webtoon', color: '#00d564', pageId: (s, n) => `w_${s.seriesId}_${n}` },
+        webtoon: { label: '台版 Webtoon', color: '#a259ff', pageId: (s, n) => `w_${s.seriesId}_${n}` },
         naver: { label: 'Naver', color: '#03cf5d', pageId: (s, n) => `webtoon_${s.seriesId}_${n}` },
         ridi: { label: 'Ridi', color: '#00a0e9' },
     };
@@ -776,6 +777,7 @@
         const btn = document.getElementById('rescanStart');
         const show = (text, bad = false) => { box.textContent = text; box.classList.toggle('bad', bad); };
         rescan.eps = [];
+        rescan.guessedFrom = null;
         btn.disabled = true;
         if (message) return show(message);
         const part = document.getElementById('rescanPart').value;
@@ -795,6 +797,13 @@
                 rescan.eps = Array.from({ length: to - from + 1 }, (_, k) => from + k - offset);
             } else {
                 const hits = rescan.index.filter(x => x.part === part && x.k >= from && x.k <= to);
+                // 本篇超過清單的（台版大人系網頁只列前幾話）照順序推算網址編號
+                const shift = mainShiftOf(rescan.index);
+                const maxMain = Math.max(0, ...rescan.index.filter(x => x.part === 'main').map(x => x.k));
+                if (part === 'main' && shift != null) {
+                    for (let k = Math.max(from, maxMain + 1); k <= to; k++) hits.push({ no: k + shift, part, k, guessed: true });
+                    rescan.guessedFrom = to > maxMain ? maxMain + 1 : null;
+                }
                 if (!hits.length) {
                     const max = Math.max(0, ...rescan.index.filter(x => x.part === part).map(x => x.k));
                     return show(max ? `${PART_LABEL[part]}只到第 ${max} 話` : `這部作品沒有找到${PART_LABEL[part]}`, true);
@@ -806,7 +815,8 @@
         const nos = rescan.eps.map(ep => ep + offset);
         const range = nos.length === 1 ? `第 ${nos[0]} 號` : `第 ${nos[0]}～${nos[nos.length - 1]} 號`;
         const partText = part === 'url' ? '' : `${PART_LABEL[part]}${part === 'after' && !fromRaw ? '' : ` ${fromRaw}${toRaw && toRaw !== fromRaw ? `～${toRaw}` : ''} 話`} → `;
-        show(`${partText}網址${range}，共 ${rescan.eps.length} 話`);
+        const guess = part === 'main' && rescan.guessedFrom && rescan.eps.length ? `（第 ${rescan.guessedFrom} 話以後平台網頁沒列出，照順序推算）` : '';
+        show(`${partText}網址${range}，共 ${rescan.eps.length} 話${guess}`);
         btn.disabled = false;
     }
 
@@ -883,21 +893,38 @@
         });
     }
 
+    // 本篇「網址編號 − 第幾話」的差（例如台版序章是 #1，第 1 話是 #2 → 差 1）；用來推算清單上沒有的話數
+    function mainShiftOf(index) {
+        const last = [...index].reverse().find(x => x.part === 'main');
+        return last ? last.no - last.k : null;
+    }
+
     function episodeLabelOf(source, ep) {
-        const title = source.epTitles?.[ep + (Number(source.offset) || 0)];
-        return title ? episodeTitleLabel(title) : `第 ${ep} 話`;
+        const no = ep + (Number(source.offset) || 0);
+        const title = source.epTitles?.[no];
+        if (title) return episodeTitleLabel(title);
+        // 台版「大人系」作品網頁只列前幾話（其他在 App）：超過清單的照順序推算
+        if (source.mainShift != null && no > (source.epTitlesMax || 0)) return `第 ${no - source.mainShift} 話`;
+        return `第 ${ep} 話`;
     }
 
     const titleFetching = new Set();
     async function ensureEpisodeTitles() {
         for (const source of tracker.sources) {
             const eps = Object.entries(source.episodes || {}).filter(([, e]) => e.comments?.length).map(([ep]) => Number(ep) + (Number(source.offset) || 0));
+            // 清單範圍內卻沒有標題的才重抓；超過清單的（台版大人系網頁只列前幾話）半天查一次就好，平常用推算
             const missing = eps.filter(no => !source.epTitles?.[no]);
-            if (!missing.length || titleFetching.has(source.id)) continue;
+            const needFetch = missing.some(no => no <= (source.epTitlesMax || 0))
+                || (missing.length && Date.now() - (source.titlesCheckedAt || 0) > 12 * 3600e3);
+            if (!needFetch || titleFetching.has(source.id)) continue;
             titleFetching.add(source.id);
             try {
                 const { titles } = await api(`/episode-titles?platform=${source.platform}&seriesId=${source.seriesId}`);
                 source.epTitles = Object.fromEntries(eps.filter(no => titles[no]).map(no => [no, titles[no]]));
+                const index = episodeIndex(titles);
+                source.epTitlesMax = Math.max(0, ...index.map(x => x.no));
+                source.mainShift = mainShiftOf(index);
+                source.titlesCheckedAt = Date.now();
                 save();
                 render();
             } catch { /* 查不到就先顯示編號，下次打開再試 */ }

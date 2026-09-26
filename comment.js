@@ -13,9 +13,10 @@ app.get('/get-comments', async (req, res) => {
         const { bookId, platform, limit, offsetPostId = "" } = req.query;
         let response;
 
+        // pinRepresentation=distinct：BEST 留言另外放在 result.tops（不會重複出現在 posts），=none 的話平台不回傳 BEST
         if (platform === 'webtoon') {
             // 將 offsetPostId 動態帶入 URL
-            const targetUrl = `https://www.webtoons.com/p/api/community/v2/posts?pageId=${bookId}&categoryId=&pinRepresentation=none&displayBlindCommentAsService=false&prevSize=0&nextSize=${limit}&withCursor=false&offsetPostId=${offsetPostId}`;
+            const targetUrl = `https://www.webtoons.com/p/api/community/v2/posts?pageId=${bookId}&categoryId=&pinRepresentation=distinct&displayBlindCommentAsService=false&prevSize=0&nextSize=${limit}&withCursor=false&offsetPostId=${offsetPostId}`;
             
             response = await axios.get(targetUrl, {
                 headers: {
@@ -24,7 +25,7 @@ app.get('/get-comments', async (req, res) => {
                 }
             });
         } else if (platform === 'naver') {
-            const targetUrl = `https://comic.naver.com/comment/api/community/v2/posts?pageId=${bookId}&categoryId=&pinRepresentation=none&pinType=&displayBlindCommentAsService=false&prevSize=0&nextSize=${limit}&offsetPostId=${offsetPostId}`;
+            const targetUrl = `https://comic.naver.com/comment/api/community/v2/posts?pageId=${bookId}&categoryId=&pinRepresentation=distinct&pinType=&displayBlindCommentAsService=false&prevSize=0&nextSize=${limit}&offsetPostId=${offsetPostId}`;
             
             response = await axios.get(targetUrl, {
                 headers: {
