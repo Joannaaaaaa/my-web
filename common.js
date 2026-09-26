@@ -721,8 +721,50 @@ function cleanPlatformTitle(title) {
     return String(title || '').replace(/\s*\[[^\]]*\]\s*/g, ' ').trim();
 }
 
+// 伺服器連線狀態：Render 免費方案閒置會休眠，打開頁面時先 /ping 叫醒；頁面上的「已連線」小標籤看這裡
+const Server = {
+    state: 'unknown', // unknown → waking → ok／bad
+    onChange: null,
+    set(state) {
+        if (state === this.state) return;
+        this.state = state;
+        this.onChange?.(state);
+    },
+    async wake() {
+        this.set('waking');
+        try {
+            await fetch(API_BASE_URL + '/ping'); // 有回應就代表醒了
+            this.set('ok');
+        } catch {
+            this.set('bad');
+        }
+        return this.state === 'ok';
+    },
+    label() {
+        return {
+            unknown: '', waking: '喚醒伺服器中…', ok: '已連線',
+            bad: API_BASE_URL.startsWith('http://') ? '電腦上的伺服器沒開' : '連不上伺服器',
+        }[this.state];
+    },
+    // 更新小標籤；busyText 有值時（例如背景更新中）優先顯示
+    renderPill(el, busyText = '') {
+        if (!el) return;
+        el.textContent = busyText || this.label();
+        el.className = 'server-pill' + (busyText ? ' busy' : this.state === 'ok' ? ' ok' : this.state === 'bad' ? ' bad' : '');
+        el.hidden = !el.textContent;
+        el.title = this.state === 'bad' ? '點一下重新連線' : '';
+    },
+};
+
 async function serverApi(path) {
-    const res = await fetch(API_BASE_URL + path);
+    let res;
+    try {
+        res = await fetch(API_BASE_URL + path);
+    } catch (err) {
+        Server.set('bad');
+        throw err;
+    }
+    Server.set('ok');
     if (!res.ok) throw new Error((await res.text().catch(() => '')) || `HTTP ${res.status}`);
     return res.json();
 }

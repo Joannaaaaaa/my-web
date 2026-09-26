@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-16">
+    <link rel="stylesheet" href="common.css?v=20260926-18">
     <style>
         .topbar {
             position: sticky; top: 0; z-index: 10;
@@ -45,7 +45,7 @@
 
 <header class="topbar">
     <a class="icon-btn" href="index.html" aria-label="返回" style="text-decoration:none; font-size:2.2rem;">‹</a>
-    <h1>新增漫畫</h1>
+    <h1>新增漫畫<button class="server-pill" id="serverPill" hidden onclick="Server.wake()"></button></h1>
 </header>
 
 <main class="page">
@@ -58,7 +58,7 @@
     <button class="btn btn-primary" onclick="saveToGallery()">儲存</button>
 </div>
 
-<script src="common.js?v=20260926-16"></script>
+<script src="common.js?v=20260926-18"></script>
 <script>
     const form = createReviewForm(document.getElementById('reviewForm'), {
         teamOpen: true,
@@ -97,6 +97,12 @@
         form.setData({});
         document.getElementById('draftNote').textContent = '草稿會自動保存';
         window.scrollTo(0, 0);
+    }
+
+    // 自動填入要用伺服器：打開就先叫醒（file:// 測試時不連）
+    if (location.protocol !== 'file:') {
+        Server.onChange = () => Server.renderPill(document.getElementById('serverPill'));
+        Server.wake();
     }
 </script>
 </body>

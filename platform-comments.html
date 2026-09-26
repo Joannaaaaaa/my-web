@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-16">
+    <link rel="stylesheet" href="common.css?v=20260926-18">
     <style>
         body { padding-bottom: calc(24px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -275,7 +275,7 @@
     <div class="form-hint">平常更新只重新檢查 90 天內的留言；這個會檢查全部，比較久。</div>
 </div>
 
-<script src="common.js?v=20260926-16"></script>
+<script src="common.js?v=20260926-18"></script>
 <script>
     // API_BASE_URL 在 common.js
     const PLATFORM_INFO = {
@@ -347,19 +347,9 @@
     }
 
     // 打開頁面就先叫醒 Render（免費方案閒置會休眠，第一次要等十幾秒）
-    async function wakeServer() {
-        const pill = document.getElementById('serverPill');
-        pill.className = 'server-pill';
-        pill.textContent = '喚醒伺服器中…';
-        try {
-            await fetch(API_BASE_URL + '/ping'); // 舊版伺服器沒有 /ping 會回 404，但有回應就代表醒了
-            pill.className = 'server-pill ok';
-            pill.textContent = '已連線';
-        } catch (err) {
-            pill.className = 'server-pill bad';
-            pill.textContent = API_BASE_URL.startsWith('http://') ? '電腦上的伺服器沒開' : '連不上伺服器';
-        }
-    }
+    // 連線狀態小標籤（Server 在 common.js，主頁、新增頁共用）
+    Server.onChange = () => Server.renderPill(document.getElementById('serverPill'));
+    const wakeServer = () => Server.wake();
 
     // ---------- 抓留言 ----------
     const likeCount = (c, id) => c.reactions?.[0]?.emotions?.find(e => e.emotionId === id)?.count || 0;

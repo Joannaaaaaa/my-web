@@ -273,3 +273,10 @@ a.tag-link:active { background: var(--raised); }
 .autofill-diff-text { flex: 1; min-width: 0; display: grid; gap: 2px; font-size: 0.85rem; color: var(--text-sub); overflow-wrap: anywhere; }
 .autofill-diff-label { font-weight: bold; color: var(--text); }
 .autofill-diff-btn { flex-shrink: 0; min-height: 36px; padding: 0 12px; font-size: 0.85rem; }
+
+/* 伺服器連線狀態小標籤（點一下重新連線） */
+.server-pill { font: inherit; font-size: 0.72rem; font-weight: normal; padding: 3px 10px; margin-left: 10px; border: none; border-radius: 12px;
+    background: var(--raised); color: var(--text-muted); white-space: nowrap; vertical-align: middle; cursor: pointer; }
+.server-pill.ok { color: var(--status-ongoing); }
+.server-pill.bad { color: var(--danger); }
+.server-pill.busy { color: var(--primary); background: color-mix(in srgb, var(--primary) 16%, transparent); }

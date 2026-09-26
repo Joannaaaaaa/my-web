@@ -18,7 +18,7 @@
             box.textContent = '頁面發生錯誤：' + (e.message || e.error) + '（' + (e.filename || '').split('/').pop() + ':' + e.lineno + '）。請重新整理；如果一直出現，請截圖給開發者。';
         });
     </script>
-    <link rel="stylesheet" href="common.css?v=20260926-16">
+    <link rel="stylesheet" href="common.css?v=20260926-18">
     <style>
         body { padding-bottom: calc(72px + var(--safe-bottom)); }
         body.no-scroll { overflow: hidden; }
@@ -298,8 +298,6 @@
         .menu-item-2line { padding-top: 8px; padding-bottom: 8px; }
         .menu-sub { display: block; margin-top: 2px; font-size: 0.78rem; color: var(--text-sub); line-height: 1.4; }
         .menu-sub.bad { color: var(--flag-text); }
-        .sync-pill { margin-left: 10px; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: normal; vertical-align: middle;
-            background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--primary); }
         .menu-item {
             display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 0 8px;
             border: none; background: none; color: var(--text); font-size: 1rem; text-align: left; cursor: pointer;
@@ -372,6 +370,18 @@
         .sync-diff { display: flex; gap: 10px; align-items: flex-start; margin-top: 4px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--flag-text) 12%, transparent); cursor: pointer; }
         .sync-diff input { width: 18px; height: 18px; margin: 2px 0 0; flex-shrink: 0; accent-color: var(--primary); }
         .sync-diff-hint { color: var(--text-muted); font-size: 0.8rem; }
+        .help details { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; background: var(--surface); }
+        .help summary { list-style: none; cursor: pointer; padding: 12px 14px; font-weight: bold; min-height: 44px; display: flex; justify-content: space-between; align-items: center; }
+        .help summary::-webkit-details-marker { display: none; }
+        .help summary::after { content: '▾'; color: var(--text-muted); transition: transform 0.2s; }
+        .help details[open] summary::after { transform: rotate(180deg); }
+        .help .help-body { padding: 0 14px 12px; font-size: 0.88rem; line-height: 1.7; color: var(--text-sub); }
+        .help .help-body ul { margin: 4px 0; padding-left: 20px; }
+        .help .help-body li { margin: 3px 0; }
+        .help .help-body b { color: var(--text); }
+        .help table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 6px 0; }
+        .help th, .help td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
+        .help td:first-child { white-space: nowrap; color: var(--text); }
         .sync-intro { color: var(--text-sub); font-size: 0.88rem; line-height: 1.7; margin: 0 0 12px; }
         .cleanup-notes { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; }
         .cleanup-notes li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -408,7 +418,7 @@
 <body>
 
 <header class="app-header">
-    <h1>웹툰<span class="count" id="totalCount"></span><span class="sync-pill" id="autoSyncPill" hidden>🔄 更新中…</span></h1>
+    <h1>웹툰<span class="count" id="totalCount"></span><button class="server-pill" id="serverPill" hidden onclick="Server.wake()"></button></h1>
     <button class="icon-btn" onclick="Sheets.open('menuSheet')" aria-label="更多功能">⋯</button>
 </header>
 
@@ -509,6 +519,7 @@
     <button class="menu-item" id="themeMenuItem" onclick="cycleTheme()">🌓 外觀：跟隨手機</button>
     <button class="menu-item" onclick="document.getElementById('filePicker').click()">📤 匯入備份</button>
     <a class="menu-item" href="platform-comments.html">💬 查詢平台留言</a>
+    <button class="menu-item" onclick="Sheets.open('helpSheet')">❓ 使用說明</button>
     <div class="menu-divider"></div>
     <button class="menu-item danger" onclick="clearAllData()">🗑️ 清除全部資料</button>
 </div>
@@ -568,6 +579,150 @@
     <div class="fullsheet-body" id="syncBody"></div>
     <div class="fullsheet-footer">
         <button class="btn btn-primary" style="flex:1;" id="syncApply" onclick="syncMainAction()">開始查詢</button>
+    </div>
+</div>
+
+<!-- 使用說明 -->
+<div class="fullsheet help" id="helpSheet">
+    <div class="fullsheet-header">
+        <button class="icon-btn" onclick="Sheets.closeTop()" aria-label="關閉">✕</button>
+        <div class="sheet-title">使用說明</div>
+    </div>
+    <div class="fullsheet-body">
+        <details open>
+            <summary>閱讀狀態</summary>
+            <div class="help-body">
+                <table>
+                    <tr><th>狀態</th><th>意思</th></tr>
+                    <tr><td>連載中</td><td>平台還在更新、我在追。有填更新日的會出現在「本週」頁，最新話數每週自動 +1</td></tr>
+                    <tr><td>完結</td><td>平台已經完結、我還沒看完（跟「已看完」不同）</td></tr>
+                    <tr><td>休刊</td><td>平台休刊中，可以填回歸時間</td></tr>
+                    <tr><td>已看完</td><td>我看完了</td></tr>
+                    <tr><td>棄坑</td><td>不看了</td></tr>
+                    <tr><td>想看</td><td>還沒開始看</td></tr>
+                </table>
+                <ul>
+                    <li><b>📖 有得看</b>：狀態列第二顆，列出「平台最新話數比我看到的多」的作品（棄坑的不算）。想先看待補最多的，排序選「待補最多」。</li>
+                    <li>平台完結時，<b>連載中／休刊會自動改成「完結」</b>；已看完、棄坑、想看是你自己的狀態，不會被改。</li>
+                </ul>
+            </div>
+        </details>
+
+        <details>
+            <summary>話數與待補</summary>
+            <div class="help-body">
+                <ul>
+                    <li><b>看到第幾話</b>分本篇／外傳／後記，有才填（例如 70+2+1）。「+1 話」會加在最後一個有填的那一段。</li>
+                    <li><b>平台最新話數</b>：填了就會顯示「待補 N 話」＝ 最新話數 − 看到的話數（同一段才算；看外傳就比外傳）。</li>
+                    <li>連載中的作品，每週更新日最新話數<b>自動 +1</b>。</li>
+                    <li>有 Naver／Ridi／Naver Series／Bomtoon 網址的作品，<b>每天會自動從平台更新</b>最新話數（見「每天自動檢查」），+1 只是兩次檢查之間的推算；Kakao 和沒填網址的只能靠 +1。</li>
+                    <li>最新話數以韓版平台為準；Naver 含付費預覽。</li>
+                </ul>
+            </div>
+        </details>
+
+        <details>
+            <summary>本週頁</summary>
+            <div class="help-body">
+                <ul>
+                    <li>列出「連載中」且有填更新日的作品，依星期分開，今天的會標出來。</li>
+                    <li>「✓ 已讀」每週自動重置，不用自己取消。</li>
+                    <li>完結、休刊的作品不會出現在這裡；休刊的會列在「休刊回歸」區塊。</li>
+                </ul>
+            </div>
+        </details>
+
+        <details>
+            <summary>休刊與回歸</summary>
+            <div class="help-body">
+                <ul>
+                    <li>回歸時間可以寫得模糊：10/14、6月中後、6, 7月、下半年、不定。會換算成日期區間，「不定」不會提醒。</li>
+                    <li>到了回歸時間會在首頁上方和本週頁的「休刊回歸」區塊提醒；確定日期過了之後每天提醒，直到你改狀態。</li>
+                    <li><b>自動改回連載中</b>：每天自動檢查時，如果平台出了比休刊前更新的一話，會自動改回連載中、清掉回歸時間，並跳提示「某某回歸了」。需要有平台網址，而且休刊前有記錄最新話數。</li>
+                    <li>休刊要自己改（平台不一定會標休刊）。</li>
+                </ul>
+            </div>
+        </details>
+
+        <details>
+            <summary>從平台自動填入（編輯頁）</summary>
+            <div class="help-body">
+                <ul>
+                    <li>支援 <b>Naver、Ridi、Naver Series、Bomtoon</b>。Kakao 會擋伺服器的請求，無法自動填。</li>
+                    <li>按「🔎 從平台自動填入」→ 選平台：有填作品網址就直接查，沒有就用韓文標題搜尋、點選正確的作品。</li>
+                    <li>會填：作品網址、韓文標題、封面、創作團隊（원작／글／그림／製作團隊）、平台最新話數、更新日。</li>
+                    <li><b>只填空白的欄位</b>。平台最新話數例外，會改成平台上的數字（看外傳／後記時填那一段的）。</li>
+                    <li>你已經寫的創作團隊跟平台不一樣時（平台有你沒寫的人名），會列出來，按「換成平台的」才換。</li>
+                    <li>Bomtoon 的成人作品沒登入時只拿得到標題、作者和話數。</li>
+                </ul>
+            </div>
+        </details>
+
+        <details>
+            <summary>更新平台資料（⋯ 選單）</summary>
+            <div class="help-body">
+                <ul>
+                    <li>一次查所有有 Naver／Ridi／Naver Series／Bomtoon 的作品。有網址直接查；沒網址用韓文標題找，<b>完全同名而且只有一部</b>才會採用並補上網址。</li>
+                    <li>查完先列出每部要改什麼，<b>勾選後才套用</b>；沒查到的列在最後，到編輯頁手動「從平台自動填入」。</li>
+                    <li>創作團隊跟平台不一樣的會用黃底列出，預設不勾，勾了才換。</li>
+                    <li>最新話數只更新連載中／休刊／想看／完結的作品。</li>
+                </ul>
+            </div>
+        </details>
+
+        <details>
+            <summary>每天自動檢查</summary>
+            <div class="help-body">
+                <ul>
+                    <li><b>每天第一次打開</b>時在背景跑（用手機的日期；每支手機、每個網址各自算）。</li>
+                    <li>檢查的作品：有平台網址、狀態是連載中／休刊／想看。</li>
+                    <li>只會改三件事：<b>最新話數</b>、平台完結時改成<b>完結</b>、休刊的出了新一話時改回<b>連載中</b>。其他欄位都不動。</li>
+                    <li>正在編輯的作品會跳過；開著視窗時等你關掉才刷新畫面，並跳提示。</li>
+                    <li>在哪裡看：跑的時候標題旁顯示「🔄 更新中…」；⋯ 選單「🔄 更新平台資料」下面有上次檢查的時間和結果。</li>
+                    <li>全部查失敗（例如伺服器沒醒）就不算今天檢查過，下次打開再試。</li>
+                    <li>這種自動更新不會觸發「該備份了」的提醒（可以隨時從平台重新查到）。</li>
+                </ul>
+            </div>
+        </details>
+
+        <details>
+            <summary>伺服器與連線</summary>
+            <div class="help-body">
+                <ul>
+                    <li>自動填入、自動檢查、平台留言都要透過伺服器查資料（平台不讓網頁直接查）。</li>
+                    <li>伺服器在 Render 免費方案，閒置會休眠；打開頁面時會先叫醒它，<b>第一次可能要等 30～50 秒</b>。</li>
+                    <li>標題旁的小標籤：「喚醒伺服器中…」→「已連線」；「連不上伺服器」時<b>點一下重新連線</b>。</li>
+                    <li>用電腦的測試網址時，連的是電腦上的伺服器，電腦沒開就會顯示「電腦上的伺服器沒開」。</li>
+                </ul>
+            </div>
+        </details>
+
+        <details>
+            <summary>資料與備份</summary>
+            <div class="help-body">
+                <ul>
+                    <li>資料<b>只存在這支手機的這個瀏覽器</b>裡（每個網址分開），不會上傳到任何地方。</li>
+                    <li>「💾 下載備份」會存成一個檔案，包含所有作品、封面、備忘錄和平台留言；換手機或清除資料後用「📤 匯入備份」還原。</li>
+                    <li>備份提醒：上次備份後<b>有改過資料、而且超過 7 天</b>才會提醒（從沒備份過也會提醒）。</li>
+                    <li>「🧹 整理舊資料」：把舊格式（標題括號裡的話數、心得裡的日期）整理成新格式，套用前會先自動下載一份備份。</li>
+                </ul>
+            </div>
+        </details>
+
+        <details>
+            <summary>其他功能</summary>
+            <div class="help-body">
+                <ul>
+                    <li><b>封面牆</b>：搜尋列旁的 ▦ 切換成只看封面；左上是狀態、右上是待補。</li>
+                    <li><b>創作者頁</b>：點詳細頁裡的人名，看他參與的所有作品；卡片上的 🔗 是合作過的其他作品。</li>
+                    <li><b>閱讀筆記</b>：詳細頁「＋ 筆記」，可以記日期和第幾話。</li>
+                    <li><b>統計</b>：各平台閱讀狀態、評分分布、年度回顧（要填開始／結束日期）。</li>
+                    <li><b>平台連結</b>：卡片上的平台標籤，有填網址（↗）直接打開作品頁，沒填（🔍）用韓文標題搜尋。</li>
+                    <li><b>外觀</b>：⋯ 選單切換 跟隨手機／深色／淺色。</li>
+                    <li><b>平台留言</b>：⋯ 選單「💬 查詢平台留言」，那一頁右上角「？」有自己的說明。</li>
+                </ul>
+            </div>
+        </details>
     </div>
 </div>
 
@@ -637,7 +792,7 @@
     </div>
 </div>
 
-<script src="common.js?v=20260926-16"></script>
+<script src="common.js?v=20260926-18"></script>
 <script>
     let allReviews = Store.loadReviews();
     const ui = Object.assign({ tab: 'list', status: 'all', platform: 'all', studio: 'all', sort: 'added', view: 'list' }, Store.loadUi());
@@ -1714,8 +1869,11 @@
         if (info.finished && AUTO_FINISH_FROM.includes(status)) {
             Object.assign(next, { status: '完結', returnText: '', returnFrom: '', returnTo: '' });
             rows.push(['狀態', `<span class="old">${escapeHtml(status)}</span> → 完結（平台已完結）`, true]);
+        } else if (hasResumed(r, newLatest, part.key)) {
+            Object.assign(next, { status: DEFAULT_STATUS, returnText: '', returnFrom: '', returnTo: '' });
+            rows.push(['狀態', `<span class="old">休刊</span> → 連載中（平台出了新的一話）`, true]);
         }
-        if (status === DEFAULT_STATUS && !r.updateDay && info.day && !info.finished) {
+        if ((next.status || status) === DEFAULT_STATUS && !r.updateDay && info.day && !info.finished) {
             next.updateDay = info.day;
             rows.push(['更新日', DAY_MAP[info.day]]);
         }
@@ -2107,7 +2265,10 @@
     // localStorage：{ doneDate: 最後一次成功的日期, last: { at, checked, ok, updated, finished, error } }；不在備份裡
     const AUTO_SYNC_KEY = 'my_review_auto_sync';
     const AUTO_SYNC_STATUSES = ['連載中', '休刊', '想看']; // 完結的不用每天查
+    // file://（自動化測試）預設不連伺服器，加 ?autosync=1 才會
     const AUTO_SYNC_ENABLED = location.protocol !== 'file:' || new URLSearchParams(location.search).has('autosync');
+    const renderServerPill = () => { if (AUTO_SYNC_ENABLED) Server.renderPill(document.getElementById('serverPill'), autoSyncRunning ? '🔄 更新中…' : ''); };
+    Server.onChange = renderServerPill;
     let autoSyncRunning = false;
 
     function loadAutoSync() {
@@ -2123,7 +2284,7 @@
 
     // 標題旁的「更新中」與選單裡「更新平台資料」下面的小字
     function renderAutoSyncStatus() {
-        document.getElementById('autoSyncPill').hidden = !autoSyncRunning;
+        renderServerPill();
         const el = document.getElementById('autoSyncStatus');
         const { last } = loadAutoSync();
         el.classList.remove('bad');
@@ -2140,9 +2301,17 @@
             el.classList.add('bad');
             return;
         }
-        const changes = [last.updated && `${last.updated} 部最新話數有更新`, last.finished && `${last.finished} 部改成完結`].filter(Boolean);
+        const changes = [last.resumed && `${last.resumed} 部回歸`, last.updated && `${last.updated} 部最新話數有更新`, last.finished && `${last.finished} 部改成完結`].filter(Boolean);
         const failed = last.checked - last.ok;
         el.textContent = `${when} 自動檢查 ${last.checked} 部，${changes.length ? changes.join('、') : '都是最新的'}${failed ? `（${failed} 部查不到）` : ''}`;
+    }
+
+    // 休刊的作品：平台上出了比休刊前更新的一話 → 回歸了（休刊期間最新話數不會自動 +1，所以可以直接比）
+    // 沒有記錄休刊前的最新話數就無法判斷，不改
+    function hasResumed(r, n, part) {
+        if ((r.status || DEFAULT_STATUS) !== '休刊' || !n) return false;
+        const old = latestEpisode(r);
+        return !!old && old.part === part && n > old.n;
     }
 
     async function autoSyncLatest() {
@@ -2185,6 +2354,7 @@
         // 套用時重新讀目前的資料：查詢期間被編輯（物件換掉）或正在編輯的作品都跳過
         let updated = 0;
         let finished = 0;
+        const resumed = []; // 回歸的作品標題
         for (const { r, info } of found) {
             const index = allReviews.indexOf(r);
             if (index < 0 || (isEditMode && index === currentEditIndex)) continue;
@@ -2199,16 +2369,24 @@
             if (info.finished && AUTO_FINISH_FROM.includes(r.status || DEFAULT_STATUS)) {
                 Object.assign(next, { status: '完結', returnText: '', returnFrom: '', returnTo: '' });
                 finished++;
+            } else if (hasResumed(r, n, part.key)) {
+                Object.assign(next, { status: DEFAULT_STATUS, returnText: '', returnFrom: '', returnTo: '' });
+                if (!r.updateDay && info.day) next.updateDay = info.day;
+                resumed.push(cleanTitleBrackets(r.title) || '未命名');
             }
             if (Object.keys(next).length) allReviews[index] = { ...r, ...next };
         }
-        saveAutoSync({ doneDate: today, last: { ...last, updated, finished } });
+        saveAutoSync({ doneDate: today, last: { ...last, updated, finished, resumed: resumed.length } });
         renderAutoSyncStatus();
-        if (!updated && !finished) return;
+        if (!updated && !finished && !resumed.length) return;
         Store.saveReviews(allReviews, { silent: true });
         const refresh = () => {
             renderAll();
-            showToast([updated && `已自動更新 ${updated} 部的最新話數`, finished && `${finished} 部改成完結`].filter(Boolean).join('，'));
+            showToast([
+                resumed.length && `《${resumed.slice(0, 2).join('》《')}》${resumed.length > 2 ? ` 等 ${resumed.length} 部` : ''}回歸了，已改回連載中`,
+                updated && `已自動更新 ${updated} 部的最新話數`,
+                finished && `${finished} 部改成完結`,
+            ].filter(Boolean).join('；'));
         };
         if (Sheets.stack.length) Sheets.afterAllClosed.push(refresh);
         else refresh();
@@ -2220,7 +2398,10 @@
     switchTab(ui.tab);
     loadCovers({ cleanup: true });
     renderAutoSyncStatus();
-    if (AUTO_SYNC_ENABLED) autoSyncLatest();
+    if (AUTO_SYNC_ENABLED) {
+        Server.wake();
+        autoSyncLatest();
+    }
 </script>
 </body>
 </html>
